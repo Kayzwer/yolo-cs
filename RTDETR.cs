@@ -32,7 +32,7 @@ namespace YOLO
 
             // Warmup
             NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(new Bitmap(Imgsz, Imgsz))) };
-            InferenceSession.Run(inputs, OutputData).ToArray();
+            _ = InferenceSession.Run(inputs, OutputData);
         }
 
         public void SetupLabels(Dictionary<string, Color> labels)
