@@ -1,12 +1,12 @@
 ﻿using Microsoft.ML.OnnxRuntime;
-using System.Drawing;
+using System.Drawing.Drawing2D;
 using YOLO.Extentions;
 
 namespace YOLO
 {
-    public class RTDETR
+    public class RTDETR : Yolo
     {
-        int MAX_POSSIBLE_OBJECT = 300;
+        const int MAX_POSSIBLE_OBJECT = 300;
 
         InferenceSession InferenceSession { get; set; }
         string[] OutputData { get; set; }
@@ -14,9 +14,13 @@ namespace YOLO
         int N_Class { get; set; }
         Dictionary<string, Color> Labels { get; set; }
         Dictionary<string, float[,]> bboxes_n_scores { get; set; }
-        Dictionary<string, float[]> scores_cls { get; set; }
+        float[] max_scores { get; set; }
+        int[] max_classes { get; set; }
         bool[] is_over_conf { get; set; }
-
+        Bitmap resized_img { get; set; }
+        Graphics graphics { get; set; }
+        int col_len { get; set; }
+        float[] max_argmax_cache { get; set; }
         public RTDETR(string model_path, bool use_cuda)
         {
             if (use_cuda)
@@ -29,13 +33,17 @@ namespace YOLO
             }
             Imgsz = InferenceSession.InputMetadata["images"].Dimensions[2];
             OutputData = InferenceSession.OutputMetadata.Keys.ToArray();
+            resized_img = new(Imgsz, Imgsz);
+            graphics = Graphics.FromImage(resized_img);
+            graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+            max_argmax_cache = new float[2];
 
-            // Warmup
-            NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(new Bitmap(Imgsz, Imgsz))) };
-            _ = InferenceSession.Run(inputs, OutputData);
+            using Bitmap bitmap = new(Imgsz, Imgsz);
+            NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap)) };
+            InferenceSession.Run(inputs, OutputData);
         }
 
-        public void SetupLabels(Dictionary<string, Color> labels)
+        public override void SetupLabels(Dictionary<string, Color> labels)
         {
             N_Class = labels.Count;
             Labels = labels;
@@ -46,39 +54,36 @@ namespace YOLO
                 { "bboxes", new float[MAX_POSSIBLE_OBJECT, 4] },
                 { "scores", new float[MAX_POSSIBLE_OBJECT, N_Class] }
             };
-            scores_cls = new()
-            {
-                { "scores", new float[MAX_POSSIBLE_OBJECT] },
-                { "classes", new float[MAX_POSSIBLE_OBJECT] }
-            };
+            max_scores = new float[MAX_POSSIBLE_OBJECT];
+            max_classes = new int[MAX_POSSIBLE_OBJECT];
             is_over_conf = new bool[MAX_POSSIBLE_OBJECT];
+            col_len = 4 + N_Class;
         }
 
-        public Bitmap Predict(Image image, float conf, int font_size, int bounding_box_thickness)
+        public override List<YoloPrediction> Predict(Bitmap image, float conf, float iou_conf = .45f)
         {
-            Bitmap resized_img = Utils.ResizeImage(image, Imgsz, Imgsz);
+            ResizeImage(image);
             NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img)) };
             DisposableNamedOnnxValue[] result = InferenceSession.Run(inputs, OutputData).ToArray();
             GetBboxes_n_Scores(result[0]);
-            XYWH2XYWH();
             Max_Argmax();
             Over_conf(conf);
-            List<float[]> predictions = Final_output();
-            using Graphics graphics = Graphics.FromImage(resized_img);
-            foreach (float[] prediction in predictions)
-            {
-                KeyValuePair<string, Color> label = Labels.ElementAt((int)prediction[5]);
-                graphics.DrawRectangle(new Pen(label.Value, bounding_box_thickness), new RectangleF(prediction[0], prediction[1], prediction[2], prediction[3]));
-                graphics.DrawString($"{label.Key} ({Math.Round(prediction[4], 2)})",
-                                new Font("Consolas", font_size, GraphicsUnit.Pixel), new SolidBrush(label.Value),
-                                new PointF(prediction[0], prediction[1]));
-            }
-            return resized_img;
+            return Suppress(Final_output(image.Width, image.Height), iou_conf);
+        }
+
+        public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf = 0, float iou_conf = 0)
+        {
+            ResizeImage(image);
+            NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img)) };
+            DisposableNamedOnnxValue[] result = InferenceSession.Run(inputs, OutputData).ToArray();
+            GetBboxes_n_Scores(result[0]);
+            Max_Argmax();
+            Over_conf(conf);
+            return Suppress(Final_output(image.Width, image.Height, class_conf), iou_conf);
         }
 
         public void GetBboxes_n_Scores(DisposableNamedOnnxValue input)
         {
-            int col_len = 4 + N_Class;
             int cur_col = 0;
             int cur_row = 0;
             foreach (float value in input.AsTensor<float>())
@@ -100,24 +105,13 @@ namespace YOLO
             }
         }
 
-        public void XYWH2XYWH()
-        {
-            Parallel.For(0, MAX_POSSIBLE_OBJECT, i =>
-            {
-                bboxes_n_scores["bboxes"][i, 0] = bboxes_n_scores["bboxes"][i, 0] - bboxes_n_scores["bboxes"][i, 2] / 2f;
-                bboxes_n_scores["bboxes"][i, 1] = bboxes_n_scores["bboxes"][i, 1] - bboxes_n_scores["bboxes"][i, 3] / 2f;
-                bboxes_n_scores["bboxes"][i, 2] = bboxes_n_scores["bboxes"][i, 2];
-                bboxes_n_scores["bboxes"][i, 3] = bboxes_n_scores["bboxes"][i, 3];
-            });
-        }
-
         public void Max_Argmax()
         {
             Parallel.For(0, MAX_POSSIBLE_OBJECT, i =>
             {
-                float[] max_argmax = Get_max_argmax(Split(bboxes_n_scores["scores"], i));
-                scores_cls["scores"][i] = max_argmax[0];
-                scores_cls["classes"][i] = max_argmax[1];
+                Get_max_argmax(Split(bboxes_n_scores["scores"], i));
+                max_scores[i] = max_argmax_cache[0];
+                max_classes[i] = (int)max_argmax_cache[1];
             });
         }
 
@@ -131,7 +125,7 @@ namespace YOLO
             return output;
         }
 
-        public float[] Get_max_argmax(float[] input)
+        public void Get_max_argmax(float[] input)
         {
             float max = float.NegativeInfinity;
             float max_idx = 0;
@@ -141,37 +135,112 @@ namespace YOLO
                 {
                     max = input[i];
                     max_idx = i;
+                    if (max >= 0.5f)
+                    {
+                        break;
+                    }
                 }
             }
-            return new float[] { max, max_idx };
+            max_argmax_cache[0] = max;
+            max_argmax_cache[1] = max_idx;
         }
 
         public void Over_conf(float conf)
         {
             Parallel.For(0, MAX_POSSIBLE_OBJECT, i =>
             {
-                is_over_conf[i] = scores_cls["scores"][i] > conf;
+                is_over_conf[i] = max_scores[i] >= conf;
             });
         }
 
-        public List<float[]> Final_output()
+        public List<YoloPrediction> Final_output(int image_width, int image_height)
         {
-            List<float[]> outputs = new();
-            Parallel.For(0, MAX_POSSIBLE_OBJECT, i =>
+            List<YoloPrediction> outputs = new();
+            for (int i = 0; i < is_over_conf.Length; ++i)
             {
                 if (is_over_conf[i])
                 {
-                    outputs.Add(new float[] {
-                    bboxes_n_scores["bboxes"][i, 0] * Imgsz,
-                    bboxes_n_scores["bboxes"][i, 1] * Imgsz,
-                    bboxes_n_scores["bboxes"][i, 2] * Imgsz,
-                    bboxes_n_scores["bboxes"][i, 3] * Imgsz,
-                    scores_cls["scores"][i],
-                    scores_cls["classes"][i]
-                });
+                    KeyValuePair<string, Color> label = Labels.ElementAt(max_classes[i]);
+                    YoloPrediction prediction = new()
+                    {
+                        Label = new()
+                        {
+                            Id = max_classes[i],
+                            Color = label.Value,
+                            Name = label.Key
+                        },
+                        Rectangle = new RectangleF(
+                            (bboxes_n_scores["bboxes"][i, 0] - bboxes_n_scores["bboxes"][i, 2] / 2f) * image_width,
+                            (bboxes_n_scores["bboxes"][i, 1] - bboxes_n_scores["bboxes"][i, 3] / 2f) * image_height,
+                            bboxes_n_scores["bboxes"][i, 2] * image_width,
+                            bboxes_n_scores["bboxes"][i, 3] * image_height
+                            ),
+                        Score = max_scores[i]
+                    };
+                    outputs.Add(prediction);
                 }
-            });
+            }
             return outputs;
+        }
+
+        public List<YoloPrediction> Final_output(int image_width, int image_height, Dictionary<string, float> class_conf)
+        {
+            List<YoloPrediction> outputs = new();
+            for (int i = 0; i < is_over_conf.Length; ++i)
+            {
+                if (is_over_conf[i] && max_scores[i] >= class_conf[Labels.ElementAt(max_classes[i]).Key])
+                {
+                    KeyValuePair<string, Color> label = Labels.ElementAt(max_classes[i]);
+                    outputs.Add(new YoloPrediction()
+                    {
+                        Label = new()
+                        {
+                            Id = max_classes[i],
+                            Color = label.Value,
+                            Name = label.Key
+                        },
+                        Rectangle = new RectangleF(
+                            (bboxes_n_scores["bboxes"][i, 0] - bboxes_n_scores["bboxes"][i, 2] / 2f) * image_width,
+                            (bboxes_n_scores["bboxes"][i, 1] - bboxes_n_scores["bboxes"][i, 3] / 2f) * image_height,
+                            bboxes_n_scores["bboxes"][i, 2] * image_width,
+                            bboxes_n_scores["bboxes"][i, 3] * image_height
+                            ),
+                        Score = max_scores[i]
+                    });
+                }
+            }
+            return outputs;
+        }
+
+        public void ResizeImage(Image image)
+        {
+            graphics.DrawImage(image, 0, 0, Imgsz, Imgsz);
+        }
+
+        public override List<YoloPrediction> Predict(Bitmap clone)
+        {
+            return Predict(clone, .25f);
+        }
+
+        private List<YoloPrediction> Suppress(List<YoloPrediction> items, float iou_conf)
+        {
+            List<YoloPrediction> result = new(items);
+            foreach (YoloPrediction item in items) // iterate every prediction
+            {
+                foreach (YoloPrediction current in result.ToList()) // make a copy for each iteration
+                {
+                    if (current == item) continue;
+                    float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
+                    if ((intArea / (item.Rectangle.Area() + current.Rectangle.Area() - intArea)) >= iou_conf)
+                    {
+                        if (item.Score >= current.Score)
+                        {
+                            result.Remove(current);
+                        }
+                    }
+                }
+            }
+            return result;
         }
     }
 }

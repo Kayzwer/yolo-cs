@@ -14,6 +14,7 @@ namespace YOLO
     {
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new YoloModel();
+        int Imgsz { get; set; }
 
         public Yolov5(string modelPath, bool useCuda = false)
         {
@@ -33,6 +34,10 @@ namespace YOLO
             // Get model info
             get_input_details();
             get_output_details();
+
+            using Bitmap bitmap = new(Imgsz, Imgsz);
+            NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap)) };
+            _inferenceSession.Run(inputs, _model.Outputs);
         }
 
         public void SetupLabels(string[] labels)
@@ -271,8 +276,9 @@ namespace YOLO
 
         private void get_input_details()
         {
-            _model.Height = _inferenceSession.InputMetadata["images"].Dimensions[2];
-            _model.Width = _inferenceSession.InputMetadata["images"].Dimensions[3];
+            Imgsz = _inferenceSession.InputMetadata["images"].Dimensions[2];
+            _model.Height = Imgsz;
+            _model.Width = Imgsz;
         }
 
         private void get_output_details()
@@ -295,6 +301,19 @@ namespace YOLO
         public override List<YoloPrediction> Predict(Bitmap clone, float conf_thres = 0, float iou_thres = 0)
         {
             return Predict(clone, conf_thres, iou_thres);
+        }
+
+        public override List<YoloPrediction> Predict(Bitmap clone, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
+        {
+            List<YoloPrediction> predictions = Predict(clone, conf_thres, iou_thres);
+            foreach (YoloPrediction prediction in predictions)
+            {
+                if (class_conf[prediction.Label.Name] > prediction.Score)
+                {
+                    predictions.Remove(prediction);
+                }
+            }
+            return predictions;
         }
     }
 }
