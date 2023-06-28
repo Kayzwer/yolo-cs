@@ -18,8 +18,16 @@ namespace YOLO
         {
             if (useCuda)
             {
-                SessionOptions opts = SessionOptions.MakeSessionOptionWithCudaProvider();
-                opts.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+                OrtCUDAProviderOptions cudaProviderOptions = new();
+                cudaProviderOptions.UpdateOptions(new Dictionary<string, string>()
+                {
+                    { "cudnn_conv_use_max_workspace", "1" },
+                    { "cudnn_conv1d_pad_to_nc1d", "1" },
+                    { "arena_extend_strategy", "kSameAsRequested" },
+                    { "do_copy_in_default_stream", "1" }
+                });
+                SessionOptions opts = SessionOptions.MakeSessionOptionWithCudaProvider(cudaProviderOptions);
+                opts.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
                 _inferenceSession = new InferenceSession(modelPath, opts);
             }
             else

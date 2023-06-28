@@ -85,8 +85,8 @@ namespace YOLO.Extentions
         public static Tensor<float> ExtractPixels2(Bitmap bitmap)
         {
             int pixelCount = bitmap.Width * bitmap.Height;
-            var rectangle = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
-            var tensor = new DenseTensor<float>(new[] { 1, 3, bitmap.Height, bitmap.Width });
+            Rectangle rectangle = new(0, 0, bitmap.Width, bitmap.Height);
+            DenseTensor<float> tensor = new(new[] { 1, 3, bitmap.Height, bitmap.Width });
             Span<byte> data;
 
             BitmapData bitmapData;
@@ -121,36 +121,32 @@ namespace YOLO.Extentions
 
         public static void ExtractPixelsArgb(DenseTensor<float> tensor, Span<byte> data, int pixelCount)
         {
-            var spanR = tensor.Buffer.Span;
-            var spanG = spanR.Slice(pixelCount);
-            var spanB = spanG.Slice(pixelCount);
+            Span<float> spanR = tensor.Buffer.Span;
+            Span<float> spanG = spanR[pixelCount..];
+            Span<float> spanB = spanG[pixelCount..];
 
             int sidx = 0;
-            int didx = 0;
             for (int i = 0; i < pixelCount; i++)
             {
-                spanR[didx] = data[sidx + 2] / 255.0F;
-                spanG[didx] = data[sidx + 1] / 255.0F;
-                spanB[didx] = data[sidx] / 255.0F;
-                didx++;
+                spanR[i] = data[sidx + 2] / 255.0F;
+                spanG[i] = data[sidx + 1] / 255.0F;
+                spanB[i] = data[sidx] / 255.0F;
                 sidx += 4;
             }
         }
 
         public static void ExtractPixelsRgb(DenseTensor<float> tensor, Span<byte> data, int pixelCount)
         {
-            var spanR = tensor.Buffer.Span;
-            var spanG = spanR.Slice(pixelCount);
-            var spanB = spanG.Slice(pixelCount);
+            Span<float> spanR = tensor.Buffer.Span;
+            Span<float> spanG = spanR[pixelCount..];
+            Span<float> spanB = spanG[pixelCount..];
 
             int sidx = 0;
-            int didx = 0;
             for (int i = 0; i < pixelCount; i++)
             {
-                spanR[didx] = data[sidx + 2] / 255.0F;
-                spanG[didx] = data[sidx + 1] / 255.0F;
-                spanB[didx] = data[sidx] / 255.0F;
-                didx++;
+                spanR[i] = data[sidx + 2] / 255.0F;
+                spanG[i] = data[sidx + 1] / 255.0F;
+                spanB[i] = data[sidx] / 255.0F;
                 sidx += 3;
             }
         }
