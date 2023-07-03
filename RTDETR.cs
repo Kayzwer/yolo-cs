@@ -7,16 +7,16 @@ namespace YOLO
 {
     public class RTDETR : Yolo
     {
-        const int MAX_POSSIBLE_OBJECT = 300;
 
         InferenceSession InferenceSession { get; set; }
         string[] OutputData { get; set; }
         int Imgsz { get; set; }
-        int N_Class { get; set; }
+        readonly int MAX_POSSIBLE_OBJECT;
+        readonly int N_CLASS;
         Dictionary<string, Color> Labels { get; set; }
         Bitmap resized_img { get; set; }
         Graphics graphics { get; set; }
-        int col_len { get; set; }
+        readonly int col_len;
         NamedOnnxValue[] namedOnnxValues { get; set; }
         public RTDETR(string model_path, bool use_cuda)
         {
@@ -39,9 +39,10 @@ namespace YOLO
                 InferenceSession = new(model_path);
             }
             Imgsz = InferenceSession.InputMetadata["images"].Dimensions[2];
+            MAX_POSSIBLE_OBJECT = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[1];
             OutputData = InferenceSession.OutputMetadata.Keys.ToArray();
-            N_Class = InferenceSession.OutputMetadata.ElementAt(2).Value.Dimensions[3];
-            col_len = 4 + N_Class;
+            N_CLASS = InferenceSession.OutputMetadata.ElementAt(2).Value.Dimensions[3];
+            col_len = 4 + N_CLASS;
             resized_img = new(Imgsz, Imgsz);
             graphics = Graphics.FromImage(resized_img);
             graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
@@ -81,7 +82,7 @@ namespace YOLO
                 float max_score = .0f;
                 int max_score_idx = 0;
                 int row_cache = j * col_len;
-                for (int i = 0; i < N_Class; i++)
+                for (int i = 0; i < N_CLASS; i++)
                 {
                     float value = input.ElementAt(row_cache + i + 4);
                     if (value > max_score)
