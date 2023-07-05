@@ -1,5 +1,4 @@
 ﻿using Microsoft.ML.OnnxRuntime.Tensors;
-using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 
@@ -24,7 +23,7 @@ namespace YOLO.Extentions
             return result;
         }
 
-        public static Bitmap ResizeImage(Image image,int target_width,int target_height)
+        public static Bitmap ResizeImage(Image image, int target_width, int target_height)
         {
             PixelFormat format = image.PixelFormat;
 

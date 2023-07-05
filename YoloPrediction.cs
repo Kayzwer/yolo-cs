@@ -1,13 +1,11 @@
-﻿using System.Drawing;
-
-namespace YOLO
+﻿namespace YOLO
 {
     public class YoloPrediction
     {
         public YoloLabel? Label { get; set; }
 
         public RectangleF Rectangle { get; set; }
-        
+
         public float Score { get; set; }
 
         public YoloPrediction() { }

@@ -1,6 +1,4 @@
-﻿using System.Drawing;
-
-namespace YOLO.Extentions
+﻿namespace YOLO.Extentions
 {
     public static class RectangleExtensions
     {

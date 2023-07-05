@@ -1,7 +1,7 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Collections.Concurrent;
-using System.Drawing;
+using System.Drawing.Drawing2D;
 using YOLO.Extentions;
 using YOLO.Models;
 
@@ -15,6 +15,8 @@ namespace YOLO
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new YoloModel();
         int Imgsz { get; set; }
+        Bitmap resized_img { get; set; }
+        Graphics graphics { get; set; }
 
         public Yolov5(string modelPath, bool useCuda = false)
         {
@@ -42,10 +44,17 @@ namespace YOLO
             // Get model info
             get_input_details();
             get_output_details();
-
+            resized_img = new(Imgsz, Imgsz);
+            graphics = Graphics.FromImage(resized_img);
+            graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
             using Bitmap bitmap = new(Imgsz, Imgsz);
             NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap)) };
             _inferenceSession.Run(inputs, _model.Outputs);
+        }
+
+        public void ResizeImage(Image image)
+        {
+            graphics.DrawImage(image, 0, 0, Imgsz, Imgsz);
         }
 
         public void SetupLabels(string[] labels)
@@ -91,20 +100,11 @@ namespace YOLO
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
         {
-            Bitmap resized;
-
-            if (img.Width != _model.Width || img.Height != _model.Height)
-            {
-                resized = Utils.ResizeImage(img, _model.Width, _model.Height); // fit image size to specified input size
-            }
-            else
-            {
-                resized = new(img);
-            }
+            ResizeImage(img);
 
             List<NamedOnnxValue> inputs = new() // add image as onnx input
             {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels(resized))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels(resized_img))
             };
 
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> result = _inferenceSession.Run(inputs); // run inference
@@ -194,20 +194,11 @@ namespace YOLO
 
         private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Inference(Image img)
         {
-            Bitmap resized;
-
-            if (img.Width != _model.Width || img.Height != _model.Height)
-            {
-                resized = Utils.ResizeImage(img, _model.Width, _model.Height); // fit image size to specified input size
-            }
-            else
-            {
-                resized = img as Bitmap ?? new Bitmap(img);
-            }
+            ResizeImage(img);
 
             var inputs = new[] // add image as onnx input
             {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img))
             };
 
             return _inferenceSession.Run(inputs, _model.Outputs); // run inference
@@ -314,12 +305,16 @@ namespace YOLO
         public override List<YoloPrediction> Predict(Bitmap clone, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
             List<YoloPrediction> predictions = Predict(clone, conf_thres, iou_thres);
-            foreach (YoloPrediction prediction in predictions)
+            int i = 0;
+            int n = predictions.Count;
+            while (i < n)
             {
-                if (class_conf[prediction.Label.Name] > prediction.Score)
+                if (predictions[i].Score < class_conf[predictions[i].Label.Name])
                 {
-                    predictions.Remove(prediction);
+                    predictions.RemoveAt(i--);
+                    n--;
                 }
+                i++;
             }
             return predictions;
         }

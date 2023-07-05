@@ -2,7 +2,6 @@
 {
     public abstract class Yolo
     {
-        public int Imgsz;
         public abstract List<YoloPrediction> Predict(Bitmap clone);
 
         public abstract List<YoloPrediction> Predict(Bitmap clone, float conf_thres = 0, float iou_thres = 0);

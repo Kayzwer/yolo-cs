@@ -7,13 +7,12 @@ namespace YOLO
 {
     public class RTDETR : Yolo
     {
-
         InferenceSession InferenceSession { get; set; }
         string[] OutputData { get; set; }
         int Imgsz { get; set; }
         readonly int MAX_POSSIBLE_OBJECT;
         readonly int N_CLASS;
-        Dictionary<string, Color> Labels { get; set; }
+        Dictionary<string, Color>? Labels { get; set; }
         Bitmap resized_img { get; set; }
         Graphics graphics { get; set; }
         readonly int col_len;
