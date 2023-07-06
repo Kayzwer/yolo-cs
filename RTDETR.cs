@@ -40,8 +40,8 @@ namespace YOLO
             Imgsz = InferenceSession.InputMetadata["images"].Dimensions[2];
             MAX_POSSIBLE_OBJECT = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[1];
             OutputData = InferenceSession.OutputMetadata.Keys.ToArray();
-            N_CLASS = InferenceSession.OutputMetadata.ElementAt(2).Value.Dimensions[3];
-            col_len = 4 + N_CLASS;
+            col_len = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[2];
+            N_CLASS =  col_len - 4;
             resized_img = new(Imgsz, Imgsz);
             graphics = Graphics.FromImage(resized_img);
             graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
