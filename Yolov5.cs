@@ -81,7 +81,7 @@ namespace YOLO
             SetupLabels(s);
         }
 
-        public List<YoloPrediction> Predict(Image image, float conf_thres = 0, float iou_thres = 0)
+        public List<YoloPrediction> Predict(Image image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
             if (conf_thres > 0f)
             {
@@ -95,7 +95,7 @@ namespace YOLO
             }
 
             using var outputs = Inference(image);
-            return Suppress(ParseOutput(outputs, image));
+            return Suppress(ParseOutput(outputs, image, class_conf));
         }
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
@@ -204,19 +204,19 @@ namespace YOLO
             return _inferenceSession.Run(inputs, _model.Outputs); // run inference
         }
 
-        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image)
+        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf)
         {
             if (_model.UseDetect)
             {
                 string firstOutput = _model.Outputs[0];
                 var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
-                return ParseDetect(output, image);
+                return ParseDetect(output, image, class_conf);
             }
 
             return ParseSigmoid(outputs, image);
         }
 
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf)
         {
             var result = new ConcurrentBag<YoloPrediction>();
 
@@ -248,7 +248,7 @@ namespace YOLO
 
                 for (int k = 5; k < _model.Dimensions; k++)
                 {
-                    if (span[k] <= _model.MulConfidence) continue; // skip low mul_conf results
+                    if (span[k] < _model.MulConfidence || span[k] < class_conf[_model.Labels[k - 5].Name]) continue; // skip low mul_conf results
 
                     var label = _model.Labels[k - 5];
                     var prediction = new YoloPrediction(label, span[k])
@@ -266,11 +266,6 @@ namespace YOLO
         private List<YoloPrediction> ParseSigmoid(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> output, Image image)
         {
             return new List<YoloPrediction>();
-        }
-
-        private void prepare_input(Image img)
-        {
-            var bmp = Utils.ResizeImage(img, _model.Width, _model.Height);
         }
 
         private void get_input_details()
@@ -304,19 +299,7 @@ namespace YOLO
 
         public override List<YoloPrediction> Predict(Bitmap clone, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
-            List<YoloPrediction> predictions = Predict(clone, conf_thres, iou_thres);
-            int i = 0;
-            int n = predictions.Count;
-            while (i < n)
-            {
-                if (predictions[i].Score < class_conf[predictions[i].Label.Name])
-                {
-                    predictions.RemoveAt(i--);
-                    n--;
-                }
-                i++;
-            }
-            return predictions;
+            return Predict(clone, class_conf, conf_thres, iou_thres);
         }
     }
 }

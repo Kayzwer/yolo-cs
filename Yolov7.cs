@@ -98,7 +98,7 @@ namespace YOLO
 
             Parallel.For(0, output.Dimensions[0], i =>
             {
-                var span = output.Buffer.Span.Slice(i * output.Strides[0]);
+                var span = output.Buffer.Span[(i * output.Strides[0])..];
                 var label = _model.Labels[(int)span[5]];
                 var prediction = new YoloPrediction(label, span[6]);
 

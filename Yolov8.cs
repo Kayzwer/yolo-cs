@@ -3,6 +3,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using NumSharp;
 using System.Collections.Concurrent;
 using System.Drawing.Drawing2D;
+using System.Drawing;
 using YOLO.Extentions;
 using YOLO.Models;
 
@@ -79,7 +80,7 @@ namespace YOLO
             SetupLabels(s);
         }
 
-        public List<YoloPrediction> Predict(Image image, float conf_thres = 0, float iou_thres = 0, bool useNumpy = false)
+        public List<YoloPrediction> Predict(Image image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0, bool useNumpy = false)
         {
             if (conf_thres > 0f)
             {
@@ -94,7 +95,7 @@ namespace YOLO
 
             _useNumpy = useNumpy;
             using var outputs = Inference(image);
-            return Suppress(ParseOutput(outputs, image));
+            return Suppress(ParseOutput(outputs, image, class_conf));
         }
 
         /// <summary>
@@ -187,7 +188,7 @@ namespace YOLO
             return _inferenceSession.Run(inputs, _model.Outputs);
         }
 
-        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image)
+        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf)
         {
             string firstOutput = _model.Outputs[0];
             var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
@@ -197,10 +198,10 @@ namespace YOLO
                 return ParseDetectNumpy(output, image);
             }
 
-            return ParseDetect(output, image);
+            return ParseDetect(output, image, class_conf);
         }
 
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf)
         {
             var result = new ConcurrentBag<YoloPrediction>();
 
@@ -230,7 +231,7 @@ namespace YOLO
                     {
                         var pred = span[(4 + l) * dim + j];
 
-                        if (pred < _model.Confidence) continue;
+                        if (pred < _model.Confidence || pred < class_conf[_model.Labels[l].Name]) continue;
                         var label = _model.Labels[l];
                         result.Add(new YoloPrediction
                         {
@@ -349,12 +350,6 @@ namespace YOLO
             return resizedBoxes;
         }
 
-        private void prepare_input(Image img)
-        {
-            Bitmap bmp = Utils.ResizeImage(img, _model.Width, _model.Height);
-
-        }
-
         private void get_input_details()
         {
             Imgsz = _inferenceSession.InputMetadata["images"].Dimensions[2];
@@ -386,19 +381,7 @@ namespace YOLO
 
         public override List<YoloPrediction> Predict(Bitmap clone, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
-            List<YoloPrediction> predictions = Predict(clone, conf_thres, iou_thres);
-            int i = 0;
-            int n = predictions.Count;
-            while (i < n)
-            {
-                if (predictions[i].Score < class_conf[predictions[i].Label.Name])
-                {
-                    predictions.RemoveAt(i--);
-                    n--;
-                }
-                i++;
-            }
-            return predictions;
+            return Predict(clone, class_conf, conf_thres, iou_thres);
         }
     }
 }
