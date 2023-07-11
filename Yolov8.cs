@@ -1,9 +1,7 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using NumSharp;
 using System.Collections.Concurrent;
 using System.Drawing.Drawing2D;
-using System.Drawing;
 using YOLO.Extentions;
 using YOLO.Models;
 
@@ -13,7 +11,6 @@ namespace YOLO
     {
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new YoloModel();
-        private bool _useNumpy;
         int Imgsz { get; set; }
         Bitmap resized_img { get; set; }
         Graphics graphics { get; set; }
@@ -80,7 +77,7 @@ namespace YOLO
             SetupLabels(s);
         }
 
-        public List<YoloPrediction> Predict(Image image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0, bool useNumpy = false)
+        public List<YoloPrediction> Predict(Image image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
             if (conf_thres > 0f)
             {
@@ -92,34 +89,23 @@ namespace YOLO
             {
                 _model.Overlap = iou_thres;
             }
-
-            _useNumpy = useNumpy;
             using var outputs = Inference(image);
-            return Suppress(ParseOutput(outputs, image, class_conf));
+            return Suppress(ParseOutput(outputs, image, class_conf), iou_thres);
         }
 
         /// <summary>
         /// Removes overlapped duplicates (nms).
         /// </summary>
-        private List<YoloPrediction> Suppress(List<YoloPrediction> items)
+        private List<YoloPrediction> Suppress(List<YoloPrediction> items, float iou_conf)
         {
-            var result = new List<YoloPrediction>(items);
-
-            foreach (var item in items) // iterate every prediction
+            List<YoloPrediction> result = new(items);
+            foreach (YoloPrediction item in items) // iterate every prediction
             {
-                foreach (var current in result.ToList()) // make a copy for each iteration
+                foreach (YoloPrediction current in result.ToList()) // make a copy for each iteration
                 {
                     if (current == item) continue;
-
-                    var (rect1, rect2) = (item.Rectangle, current.Rectangle);
-
-                    var intersection = RectangleF.Intersect(rect1, rect2);
-
-                    float intArea = intersection.Area(); // intersection area
-                    float unionArea = rect1.Area() + rect2.Area() - intArea; // union area
-                    float overlap = intArea / unionArea; // overlap ratio
-
-                    if (overlap >= _model.Overlap)
+                    float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
+                    if ((intArea / (item.Rectangle.Area() + current.Rectangle.Area() - intArea)) >= iou_conf)
                     {
                         if (item.Score >= current.Score)
                         {
@@ -128,7 +114,6 @@ namespace YOLO
                     }
                 }
             }
-
             return result;
         }
 
@@ -192,12 +177,6 @@ namespace YOLO
         {
             string firstOutput = _model.Outputs[0];
             var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
-
-            if (_useNumpy)
-            {
-                return ParseDetectNumpy(output, image);
-            }
-
             return ParseDetect(output, image, class_conf);
         }
 
@@ -233,7 +212,7 @@ namespace YOLO
 
                         if (pred < _model.Confidence || pred < class_conf[_model.Labels[l].Name]) continue;
                         var label = _model.Labels[l];
-                        result.Add(new YoloPrediction
+                        result.Add(new()
                         {
                             Label = label,
                             Score = pred,
@@ -244,110 +223,6 @@ namespace YOLO
             });
 
             return result.ToList();
-        }
-
-
-        private List<YoloPrediction> ParseDetectNumpy(DenseTensor<float> output, Image image)
-        {
-            float[] outputArray = output.ToArray();
-            var numpyArray = np.array(outputArray, np.float32);
-            var data = numpyArray.reshape(84, 8400).transpose(new int[] { 1, 0 });
-            return ProcessResult(data, image);
-        }
-
-        private List<YoloPrediction> ProcessResult(NDArray data, Image image)
-        {
-            var result = new ConcurrentBag<YoloPrediction>();
-            var scores = np.max(data[":, 4:"], axis: 1);
-
-            var temp = data[scores > 0.2f];
-            scores = scores[scores > 0.2f];
-            var class_ids = np.argmax(temp[":, 4:"], 1);
-            var boxes = extract_rect(temp, image.Width, image.Height);
-            var indices = nms(boxes, scores);
-            foreach (var x in indices)
-            {
-                var label = _model.Labels[class_ids[x]];
-                var prediction = new YoloPrediction(label, scores[x])
-                {
-                    Rectangle = new RectangleF(boxes[x][0], boxes[x][1], boxes[x][2] - boxes[x][0], boxes[x][3] - boxes[x][1])
-                };
-                result.Add(prediction);
-            };
-            return result.ToList();
-        }
-
-
-        private int[] nms(NDArray boxes, NDArray scores, float iou_threshold = .5f)
-        {
-
-            // Sort by score
-            var sortedIndices = np.argsort<float>(scores)["::-1"];
-
-            List<int> keepBoxes = new List<int>();
-            int[] sortedIndicesArray = sortedIndices.Data<int>().ToArray();
-            while (sortedIndicesArray.Length > 0)
-            {
-                // Pick the last box
-                int boxId = sortedIndicesArray[0];
-                keepBoxes.Add(boxId);
-                // Compute IoU of the picked box with the rest
-                NDArray ious = ComputeIOU(boxes[boxId], boxes[sortedIndices["1:"]]);
-
-                // Remove boxes with IoU over the threshold
-                var keepIndices = ious.Data<float>().AsQueryable().ToArray().Select(x => x < iou_threshold).ToArray();
-                sortedIndicesArray = sortedIndicesArray.Skip(keepIndices.Length + 1).ToArray();
-            }
-
-            return keepBoxes.ToArray();
-        }
-
-        private NDArray ComputeIOU(NDArray box, NDArray boxes)
-        {
-            // Compute xmin, ymin, xmax, ymax for both boxes
-            var xmin = np.maximum(box[0], boxes[":", 0]);
-            var ymin = np.maximum(box[1], boxes[":", 1]);
-            var xmax = np.minimum(box[2], boxes[":", 2]);
-            var ymax = np.minimum(box[3], boxes[":", 3]);
-
-            // Compute intersection area
-            var intersection_area = np.maximum(0, xmax - xmin) * np.maximum(0, ymax - ymin);
-
-            // Compute union area
-            var box_area = (box[2] - box[0]) * (box[3] - box[1]);
-            var boxes_area = (boxes[":", 2] - boxes[":", 0]) * (boxes[":", 3] - boxes[":", 1]);
-            var union_area = box_area + boxes_area - intersection_area;
-
-            // Compute IoU
-            var iou = intersection_area / union_area;
-
-            return iou;
-        }
-
-        private NDArray extract_rect(NDArray temp, int width, int height)
-        {
-            var data = rescale_boxes(temp[":, :4"], width, height);
-            var boxes = Xywh2Xyxy(data);
-            return boxes;
-        }
-
-        public NDArray Xywh2Xyxy(NDArray x)
-        {
-            var y = x.Clone();
-            y[":", 0] = x[":", 0] - x[":", 2] / 2;
-            y[":", 1] = x[":", 1] - x[":", 3] / 2;
-            y[":", 2] = x[":", 0] + x[":", 2] / 2;
-            y[":", 3] = x[":", 1] + x[":", 3] / 2;
-            return y;
-        }
-
-        private NDArray rescale_boxes(NDArray boxes, int width, int height)
-        {
-
-            NDArray inputShape = np.array(new float[] { _model.Width, _model.Height, _model.Width, _model.Height });
-            NDArray resizedBoxes = np.divide(boxes, inputShape);
-            resizedBoxes = np.multiply(resizedBoxes, new float[] { width, height, width, height });
-            return resizedBoxes;
         }
 
         private void get_input_details()

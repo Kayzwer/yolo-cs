@@ -78,15 +78,7 @@ namespace YOLO
             SetupLabels(s);
         }
 
-        public List<YoloPrediction> Predict(Image image)
-        {
-            using var outputs = Inference(image);
-            string firstOutput = _model.Outputs[0];
-            var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
-            return ParseDetect(output, image);
-        }
-
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf)
         {
             var result = new ConcurrentBag<YoloPrediction>();
 
@@ -100,24 +92,48 @@ namespace YOLO
             {
                 var span = output.Buffer.Span[(i * output.Strides[0])..];
                 var label = _model.Labels[(int)span[5]];
-                var prediction = new YoloPrediction(label, span[6]);
+                if (span[6] >= class_conf[label.Name] && span[6] >= conf)
+                {
+                    var prediction = new YoloPrediction(label, span[6]);
 
-                var xMin = (span[1] - xPad) / gain;
-                var yMin = (span[2] - yPad) / gain;
-                var xMax = (span[3] - xPad) / gain;
-                var yMax = (span[4] - yPad) / gain;
+                    var xMin = (span[1] - xPad) / gain;
+                    var yMin = (span[2] - yPad) / gain;
+                    var xMax = (span[3] - xPad) / gain;
+                    var yMax = (span[4] - yPad) / gain;
 
-                //install package TensorFlow.Net,SciSharp.TensorFlow.Redist 安装这两个包可以用numpy 进行计算
-                //var box = np.array(item.GetValue(1), item.GetValue(2), item.GetValue(3), item.GetValue(4));
-                //var tmp =  np.array(xPad, yPad,xPad, yPad) ;
-                //box -= tmp;
-                //box /= gain;
+                    //install package TensorFlow.Net,SciSharp.TensorFlow.Redist 安装这两个包可以用numpy 进行计算
+                    //var box = np.array(item.GetValue(1), item.GetValue(2), item.GetValue(3), item.GetValue(4));
+                    //var tmp =  np.array(xPad, yPad,xPad, yPad) ;
+                    //box -= tmp;
+                    //box /= gain;
 
-                prediction.Rectangle = new RectangleF(xMin, yMin, xMax - xMin, yMax - yMin);
-                result.Add(prediction);
+                    prediction.Rectangle = new RectangleF(xMin, yMin, xMax - xMin, yMax - yMin);
+                    result.Add(prediction);
+                }
             });
 
             return result.ToList();
+        }
+
+        private List<YoloPrediction> Suppress(List<YoloPrediction> items, float iou_conf)
+        {
+            List<YoloPrediction> result = new(items);
+            foreach (YoloPrediction item in items) // iterate every prediction
+            {
+                foreach (YoloPrediction current in result.ToList()) // make a copy for each iteration
+                {
+                    if (current == item) continue;
+                    float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
+                    if ((intArea / (item.Rectangle.Area() + current.Rectangle.Area() - intArea)) >= iou_conf)
+                    {
+                        if (item.Score >= current.Score)
+                        {
+                            result.Remove(current);
+                        }
+                    }
+                }
+            }
+            return result;
         }
 
         private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Inference(Image img)
@@ -163,19 +179,10 @@ namespace YOLO
 
         public override List<YoloPrediction> Predict(Bitmap clone, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
-            List<YoloPrediction> predictions = Predict(clone, conf_thres, iou_thres);
-            int i = 0;
-            int n = predictions.Count;
-            while (i < n)
-            {
-                if (predictions[i].Score < class_conf[predictions[i].Label.Name])
-                {
-                    predictions.RemoveAt(i--);
-                    n--;
-                }
-                i++;
-            }
-            return predictions;
+            using var outputs = Inference(clone);
+            string firstOutput = _model.Outputs[0];
+            var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
+            return Suppress(ParseDetect(output, clone, class_conf, conf_thres), iou_thres);
         }
     }
 }

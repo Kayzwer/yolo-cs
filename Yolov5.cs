@@ -95,7 +95,7 @@ namespace YOLO
             }
 
             using var outputs = Inference(image);
-            return Suppress(ParseOutput(outputs, image, class_conf));
+            return Suppress(ParseOutput(outputs, image, class_conf), iou_thres);
         }
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
@@ -161,25 +161,16 @@ namespace YOLO
         /// <summary>
         /// Removes overlaped duplicates (nms).
         /// </summary>
-        private List<YoloPrediction> Suppress(List<YoloPrediction> items)
+        private List<YoloPrediction> Suppress(List<YoloPrediction> items, float iou_conf)
         {
-            var result = new List<YoloPrediction>(items);
-
-            foreach (var item in items) // iterate every prediction
+            List<YoloPrediction> result = new(items);
+            foreach (YoloPrediction item in items) // iterate every prediction
             {
-                foreach (var current in result.ToList()) // make a copy for each iteration
+                foreach (YoloPrediction current in result.ToList()) // make a copy for each iteration
                 {
                     if (current == item) continue;
-
-                    var (rect1, rect2) = (item.Rectangle, current.Rectangle);
-
-                    var intersection = RectangleF.Intersect(rect1, rect2);
-
-                    float intArea = intersection.Area(); // intersection area
-                    float unionArea = rect1.Area() + rect2.Area() - intArea; // union area
-                    float overlap = intArea / unionArea; // overlap ratio
-
-                    if (overlap >= _model.Overlap)
+                    float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
+                    if ((intArea / (item.Rectangle.Area() + current.Rectangle.Area() - intArea)) >= iou_conf)
                     {
                         if (item.Score >= current.Score)
                         {
@@ -188,7 +179,6 @@ namespace YOLO
                     }
                 }
             }
-
             return result;
         }
 
