@@ -96,7 +96,7 @@ namespace YOLO
                 }
                 if (max_score >= conf && max_score >= class_conf.ElementAt(max_score_idx).Value)
                 {
-                    predictions.Add(new YoloPrediction()
+                    predictions.Add(new()
                     {
                         Label = new()
                         {
@@ -105,8 +105,8 @@ namespace YOLO
                             Name = Labels.ElementAt(max_score_idx).Key
                         },
                         Rectangle = new RectangleF(
-                            (input.ElementAt(row_cache) - input.ElementAt(row_cache + 2) / 2f) * image_width,
-                            (input.ElementAt(row_cache + 1) - input.ElementAt(row_cache + 3) / 2f) * image_height,
+                            (input.ElementAt(row_cache) - input.ElementAt(row_cache + 2) * 0.5f) * image_width,
+                            (input.ElementAt(row_cache + 1) - input.ElementAt(row_cache + 3) * 0.5f) * image_height,
                             input.ElementAt(row_cache + 2) * image_width,
                             input.ElementAt(row_cache + 3) * image_height
                             ),

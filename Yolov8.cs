@@ -10,7 +10,7 @@ namespace YOLO
     public class Yolov8 : Yolo, IDisposable
     {
         private readonly InferenceSession _inferenceSession;
-        private readonly YoloModel _model = new YoloModel();
+        private readonly YoloModel _model = new();
         int Imgsz { get; set; }
         Bitmap resized_img { get; set; }
         Graphics graphics { get; set; }
@@ -21,7 +21,7 @@ namespace YOLO
             if (useCuda)
             {
                 OrtCUDAProviderOptions cudaProviderOptions = new();
-                cudaProviderOptions.UpdateOptions(new Dictionary<string, string>()
+                cudaProviderOptions.UpdateOptions(new()
                 {
                     { "cudnn_conv_use_max_workspace", "1" },
                     { "cudnn_conv1d_pad_to_nc1d", "1" },
@@ -30,12 +30,12 @@ namespace YOLO
                 });
                 SessionOptions opts = SessionOptions.MakeSessionOptionWithCudaProvider(cudaProviderOptions);
                 opts.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-                _inferenceSession = new InferenceSession(modelPath, opts);
+                _inferenceSession = new(modelPath, opts);
             }
             else
             {
                 SessionOptions opts = new();
-                _inferenceSession = new InferenceSession(modelPath, opts);
+                _inferenceSession = new(modelPath, opts);
             }
             // Get model info
             get_input_details();
@@ -57,7 +57,7 @@ namespace YOLO
         {
             labels.Select((s, i) => new { i, s }).ToList().ForEach(item =>
             {
-                _model.Labels.Add(new YoloLabel { Id = item.i, Name = item.s });
+                _model.Labels.Add(new() { Id = item.i, Name = item.s });
             });
         }
 
@@ -66,30 +66,19 @@ namespace YOLO
             int i = 0;
             foreach (KeyValuePair<string, Color> keyValuePair in color_mapper)
             {
-                _model.Labels.Add(new YoloLabel { Id = i, Name = keyValuePair.Key, Color = keyValuePair.Value });
+                _model.Labels.Add(new() { Id = i, Name = keyValuePair.Key, Color = keyValuePair.Value });
                 ++i;
             }
         }
 
         public void SetupYoloDefaultLabels()
         {
-            var s = new string[] { "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
-            SetupLabels(s);
+            SetupLabels(new string[] { "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" });
         }
 
         public List<YoloPrediction> Predict(Image image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
-            if (conf_thres > 0f)
-            {
-                _model.Confidence = conf_thres;
-                _model.MulConfidence = conf_thres + 0.05f;
-            }
-
-            if (iou_thres > 0f)
-            {
-                _model.Overlap = iou_thres;
-            }
-            using var outputs = Inference(image);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = Inference(image);
             return Suppress(ParseOutput(outputs, image, class_conf), iou_thres);
         }
 
@@ -165,7 +154,7 @@ namespace YOLO
         {
             ResizeImage(img);
 
-            var inputs = new[]
+            NamedOnnxValue[] inputs = new[]
             {
                 NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img))
             };
@@ -176,17 +165,17 @@ namespace YOLO
         private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf)
         {
             string firstOutput = _model.Outputs[0];
-            var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
+            DenseTensor<float> output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
             return ParseDetect(output, image, class_conf);
         }
 
         private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf)
         {
-            var result = new ConcurrentBag<YoloPrediction>();
+            ConcurrentBag<YoloPrediction> result = new();
 
             var (w, h) = (image.Width, image.Height);
             var (xGain, yGain) = (_model.Width / (float)w, _model.Height / (float)h);
-            var gain = Math.Min(xGain, yGain);
+            float gain = Math.Min(xGain, yGain);
 
             var (xPad, yPad) = ((_model.Width - w * gain) / 2, (_model.Height - h * gain) / 2);
 
@@ -208,15 +197,15 @@ namespace YOLO
 
                     for (int l = 0; l < _model.Dimensions - 4; l++)
                     {
-                        var pred = span[(4 + l) * dim + j];
+                        float pred = span[(4 + l) * dim + j];
 
                         if (pred < _model.Confidence || pred < class_conf[_model.Labels[l].Name]) continue;
-                        var label = _model.Labels[l];
+                        YoloLabel label = _model.Labels[l];
                         result.Add(new()
                         {
                             Label = label,
                             Score = pred,
-                            Rectangle = new RectangleF(xMin, yMin, xMax - xMin, yMax - yMin)
+                            Rectangle = new(xMin, yMin, xMax - xMin, yMax - yMin)
                         });
                     }
                 });
