@@ -163,10 +163,10 @@ namespace YOLO
             ConcurrentBag<YoloPrediction> result = new();
 
             var (w, h) = (image.Width, image.Height);
-            var (xGain, yGain) = (_model.Width / (float)w, _model.Height / (float)h);
+            var (xGain, yGain) = (Imgsz / (float)w, Imgsz / (float)h);
             float gain = Math.Min(xGain, yGain);
-
-            var (xPad, yPad) = ((_model.Width - w * gain) / 2, (_model.Height - h * gain) / 2);
+            float gain_inv = 1 / gain;
+            var (xPad, yPad) = ((Imgsz - w * gain) * 0.5f, (Imgsz - h * gain) * 0.5f);
 
             Parallel.For(0, output.Dimensions[0], i =>
             {
@@ -179,10 +179,10 @@ namespace YOLO
                     float b = span[dim + j];
                     float c = span[2 * dim + j];
                     float d = span[3 * dim + j];
-                    float xMin = (a - c / 2 - xPad) / gain; // unpad bbox tlx to original
-                    float yMin = (b - d / 2 - yPad) / gain; // unpad bbox tly to original
-                    float xMax = (a + c / 2 - xPad) / gain; // unpad bbox brx to original
-                    float yMax = (b + d / 2 - yPad) / gain; // unpad bbox bry to original
+                    float xMin = (a - c * 0.5f - xPad) * gain_inv; // unpad bbox tlx to original
+                    float yMin = (b - d * 0.5f - yPad) * gain_inv; // unpad bbox tly to original
+                    float xMax = (a + c * 0.5f - xPad) * gain_inv; // unpad bbox brx to original
+                    float yMax = (b + d * 0.5f - yPad) * gain_inv; // unpad bbox bry to original
 
                     for (int l = 0; l < _model.Dimensions - 4; l++)
                     {
@@ -201,8 +201,6 @@ namespace YOLO
         private void get_input_details()
         {
             Imgsz = _inferenceSession.InputMetadata["images"].Dimensions[2];
-            _model.Height = Imgsz;
-            _model.Width = Imgsz;
         }
 
         private void get_output_details()

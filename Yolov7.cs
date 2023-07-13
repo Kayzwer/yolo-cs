@@ -72,7 +72,7 @@ namespace YOLO
             var (xGain, yGain) = (_model.Width / (float)w, _model.Height / (float)h); // x, y gains
             var gain = Math.Min(xGain, yGain); // gain = resized / original
 
-            var (xPad, yPad) = ((_model.Width - w * gain) / 2, (_model.Height - h * gain) / 2); // left, right pads
+            var (xPad, yPad) = ((_model.Width - w * gain) * 0.5f, (_model.Height - h * gain) * 0.5f); // left, right pads
 
             Parallel.For(0, output.Dimensions[0], i =>
             {
@@ -80,10 +80,11 @@ namespace YOLO
                 var label = _model.Labels[(int)span[5]];
                 if (span[6] >= class_conf[label.Name] && span[6] >= conf)
                 {
-                    float xMin = (span[1] - xPad) / gain;
-                    float yMin = (span[2] - yPad) / gain;
-                    float xMax = (span[3] - xPad) / gain;
-                    float yMax = (span[4] - yPad) / gain;
+                    float gain_inv = 1 / gain;
+                    float xMin = (span[1] - xPad) * gain_inv;
+                    float yMin = (span[2] - yPad) * gain_inv;
+                    float xMax = (span[3] - xPad) * gain_inv;
+                    float yMax = (span[4] - yPad) * gain_inv;
                     result.Add(new(label, new(xMin, yMin, xMax - xMin, yMax - yMin), span[6]));
                 }
             });

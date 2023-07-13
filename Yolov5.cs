@@ -202,11 +202,11 @@ namespace YOLO
             var (xGain, yGain) = (_model.Width / (float)w, _model.Height / (float)h); // x, y gains
             var gain = Math.Min(xGain, yGain); // gain = resized / original
 
-            var (xPad, yPad) = ((_model.Width - w * gain) / 2, (_model.Height - h * gain) / 2); // left, right pads
+            var (xPad, yPad) = ((_model.Width - w * gain) * 0.5f, (_model.Height - h * gain) * 0.5f); // left, right pads
 
             Parallel.For(0, (int)output.Length / _model.Dimensions, i =>
             {
-                var span = output.Buffer.Span.Slice(i * _model.Dimensions);
+                var span = output.Buffer.Span[(i * _model.Dimensions)..];
                 if (span[4] <= _model.Confidence) return; // skip low obj_conf results
 
                 for (int j = 5; j < _model.Dimensions; j++)
@@ -214,10 +214,10 @@ namespace YOLO
                     span[j] *= span[4]; // mul_conf = obj_conf * cls_conf
                 }
 
-                float xMin = (span[0] - span[2] / 2 - xPad) / gain; // unpad bbox tlx to original
-                float yMin = (span[1] - span[3] / 2 - yPad) / gain; // unpad bbox tly to original
-                float xMax = (span[0] + span[2] / 2 - xPad) / gain; // unpad bbox brx to original
-                float yMax = (span[1] + span[3] / 2 - yPad) / gain; // unpad bbox bry to original
+                float xMin = (span[0] - span[2] * 0.5f - xPad) / gain; // unpad bbox tlx to original
+                float yMin = (span[1] - span[3] * 0.5f - yPad) / gain; // unpad bbox tly to original
+                float xMax = (span[0] + span[2] * 0.5f - xPad) / gain; // unpad bbox brx to original
+                float yMax = (span[1] + span[3] * 0.5f - yPad) / gain; // unpad bbox bry to original
 
                 xMin = Utils.Clamp(xMin, 0, w - 0); // clip bbox tlx to boundaries
                 yMin = Utils.Clamp(yMin, 0, h - 0); // clip bbox tly to boundaries
