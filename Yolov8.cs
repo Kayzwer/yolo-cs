@@ -53,27 +53,14 @@ namespace YOLO
             graphics.DrawImage(image, 0, 0, Imgsz, Imgsz);
         }
 
-        public void SetupLabels(string[] labels)
-        {
-            labels.Select((s, i) => new { i, s }).ToList().ForEach(item =>
-            {
-                _model.Labels.Add(new() { Id = item.i, Name = item.s });
-            });
-        }
-
         public override void SetupLabels(Dictionary<string, Color> color_mapper)
         {
             int i = 0;
             foreach (KeyValuePair<string, Color> keyValuePair in color_mapper)
             {
-                _model.Labels.Add(new() { Id = i, Name = keyValuePair.Key, Color = keyValuePair.Value });
+                _model.Labels.Add(new(i, keyValuePair.Key, keyValuePair.Value));
                 ++i;
             }
-        }
-
-        public void SetupYoloDefaultLabels()
-        {
-            SetupLabels(new string[] { "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" });
         }
 
         public List<YoloPrediction> Predict(Image image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
@@ -90,15 +77,17 @@ namespace YOLO
             List<YoloPrediction> result = new(items);
             foreach (YoloPrediction item in items) // iterate every prediction
             {
-                foreach (YoloPrediction current in result.ToList()) // make a copy for each iteration
+                foreach (YoloPrediction current in items.ToList()) // make a copy for each iteration
                 {
-                    if (current == item) continue;
-                    float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
-                    if ((intArea / (item.Rectangle.Area() + current.Rectangle.Area() - intArea)) >= iou_conf)
+                    if (current != item)
                     {
-                        if (item.Score >= current.Score)
+                        float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
+                        if (intArea / (item.Area + current.Area - intArea) >= iou_conf)
                         {
-                            result.Remove(current);
+                            if (item.Score >= current.Score)
+                            {
+                                result.Remove(current);
+                            }
                         }
                     }
                 }
@@ -201,12 +190,7 @@ namespace YOLO
 
                         if (pred < _model.Confidence || pred < class_conf[_model.Labels[l].Name]) continue;
                         YoloLabel label = _model.Labels[l];
-                        result.Add(new()
-                        {
-                            Label = label,
-                            Score = pred,
-                            Rectangle = new(xMin, yMin, xMax - xMin, yMax - yMin)
-                        });
+                        result.Add(new(label, new(xMin, yMin, xMax - xMin, yMax - yMin), pred));
                     }
                 });
             });

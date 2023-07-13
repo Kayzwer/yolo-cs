@@ -96,22 +96,15 @@ namespace YOLO
                 }
                 if (max_score >= conf && max_score >= class_conf.ElementAt(max_score_idx).Value)
                 {
-                    predictions.Add(new()
-                    {
-                        Label = new()
-                        {
-                            Id = max_score_idx,
-                            Color = Labels.ElementAt(max_score_idx).Value,
-                            Name = Labels.ElementAt(max_score_idx).Key
-                        },
-                        Rectangle = new RectangleF(
-                            (input.ElementAt(row_cache) - input.ElementAt(row_cache + 2) * 0.5f) * image_width,
-                            (input.ElementAt(row_cache + 1) - input.ElementAt(row_cache + 3) * 0.5f) * image_height,
-                            input.ElementAt(row_cache + 2) * image_width,
-                            input.ElementAt(row_cache + 3) * image_height
-                            ),
-                        Score = max_score
-                    });
+                    predictions.Add(
+                        new(
+                            new(max_score_idx,
+                                Labels.ElementAt(max_score_idx).Key,
+                                Labels.ElementAt(max_score_idx).Value),
+                            new((input.ElementAt(row_cache) - input.ElementAt(row_cache + 2) * 0.5f) * image_width,
+                                (input.ElementAt(row_cache + 1) - input.ElementAt(row_cache + 3) * 0.5f) * image_height,
+                                input.ElementAt(row_cache + 2) * image_width, input.ElementAt(row_cache + 3) * image_height),
+                            max_score));
                 }
             });
             return predictions;
@@ -134,13 +127,15 @@ namespace YOLO
             {
                 foreach (YoloPrediction current in result.ToList()) // make a copy for each iteration
                 {
-                    if (current == item) continue;
-                    float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
-                    if ((intArea / (item.Rectangle.Area() + current.Rectangle.Area() - intArea)) >= iou_conf)
+                    if (current != item)
                     {
-                        if (item.Score >= current.Score)
+                        float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
+                        if ((intArea / (item.Area + current.Area - intArea)) >= iou_conf)
                         {
-                            result.Remove(current);
+                            if (item.Score >= current.Score)
+                            {
+                                result.Remove(current);
+                            }
                         }
                     }
                 }

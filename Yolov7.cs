@@ -54,28 +54,14 @@ namespace YOLO
             graphics.DrawImage(image, 0, 0, Imgsz, Imgsz);
         }
 
-        public void SetupLabels(string[] labels)
-        {
-            labels.Select((s, i) => new { i, s }).ToList().ForEach(item =>
-            {
-                _model.Labels.Add(new YoloLabel { Id = item.i, Name = item.s });
-            });
-        }
-
         public override void SetupLabels(Dictionary<string, Color> color_mapper)
         {
             int i = 0;
             foreach (KeyValuePair<string, Color> keyValuePair in color_mapper)
             {
-                _model.Labels.Add(new YoloLabel { Id = i, Name = keyValuePair.Key, Color = keyValuePair.Value });
+                _model.Labels.Add(new(i, keyValuePair.Key, keyValuePair.Value));
                 ++i;
             }
-        }
-
-        public void SetupYoloDefaultLabels()
-        {
-            var s = new string[] { "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
-            SetupLabels(s);
         }
 
         private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf)
@@ -94,21 +80,11 @@ namespace YOLO
                 var label = _model.Labels[(int)span[5]];
                 if (span[6] >= class_conf[label.Name] && span[6] >= conf)
                 {
-                    var prediction = new YoloPrediction(label, span[6]);
-
-                    var xMin = (span[1] - xPad) / gain;
-                    var yMin = (span[2] - yPad) / gain;
-                    var xMax = (span[3] - xPad) / gain;
-                    var yMax = (span[4] - yPad) / gain;
-
-                    //install package TensorFlow.Net,SciSharp.TensorFlow.Redist 安装这两个包可以用numpy 进行计算
-                    //var box = np.array(item.GetValue(1), item.GetValue(2), item.GetValue(3), item.GetValue(4));
-                    //var tmp =  np.array(xPad, yPad,xPad, yPad) ;
-                    //box -= tmp;
-                    //box /= gain;
-
-                    prediction.Rectangle = new RectangleF(xMin, yMin, xMax - xMin, yMax - yMin);
-                    result.Add(prediction);
+                    float xMin = (span[1] - xPad) / gain;
+                    float yMin = (span[2] - yPad) / gain;
+                    float xMax = (span[3] - xPad) / gain;
+                    float yMax = (span[4] - yPad) / gain;
+                    result.Add(new(label, new(xMin, yMin, xMax - xMin, yMax - yMin), span[6]));
                 }
             });
 
@@ -124,7 +100,7 @@ namespace YOLO
                 {
                     if (current == item) continue;
                     float intArea = RectangleF.Intersect(item.Rectangle, current.Rectangle).Area();
-                    if ((intArea / (item.Rectangle.Area() + current.Rectangle.Area() - intArea)) >= iou_conf)
+                    if ((intArea / (item.Area + current.Area - intArea)) >= iou_conf)
                     {
                         if (item.Score >= current.Score)
                         {
