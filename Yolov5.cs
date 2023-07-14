@@ -90,7 +90,7 @@ namespace YOLO
 
             List<NamedOnnxValue> inputs = new() // add image as onnx input
             {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels(resized_img))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img))
             };
 
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> result = _inferenceSession.Run(inputs); // run inference

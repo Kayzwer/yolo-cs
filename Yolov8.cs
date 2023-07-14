@@ -101,7 +101,7 @@ namespace YOLO
 
             List<NamedOnnxValue> inputs = new()
             {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels(resized_img))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img))
             };
 
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> result = _inferenceSession.Run(inputs);
@@ -162,8 +162,8 @@ namespace YOLO
         {
             ConcurrentBag<YoloPrediction> result = new();
 
-            var (w, h) = (image.Width, image.Height);
-            var (xGain, yGain) = (Imgsz / (float)w, Imgsz / (float)h);
+            var (w, h) = ((float)image.Width, (float)image.Height);
+            var (xGain, yGain) = (Imgsz / w, Imgsz / h);
             float gain = Math.Min(xGain, yGain);
             float gain_inv = 1 / gain;
             var (xPad, yPad) = ((Imgsz - w * gain) * 0.5f, (Imgsz - h * gain) * 0.5f);
@@ -179,18 +179,19 @@ namespace YOLO
                     float b = span[dim + j];
                     float c = span[2 * dim + j];
                     float d = span[3 * dim + j];
-                    float xMin = (a - c * 0.5f - xPad) * gain_inv; // unpad bbox tlx to original
-                    float yMin = (b - d * 0.5f - yPad) * gain_inv; // unpad bbox tly to original
-                    float xMax = (a + c * 0.5f - xPad) * gain_inv; // unpad bbox brx to original
-                    float yMax = (b + d * 0.5f - yPad) * gain_inv; // unpad bbox bry to original
+                    float x_min = a - c * 0.5f - xPad;
+                    float y_min = b - d * 0.5f - yPad;
+                    float width = (a + c * 0.5f - xPad - x_min) * gain_inv;
+                    float height = (b + d * 0.5f - yPad - y_min) * gain_inv;
 
                     for (int l = 0; l < _model.Dimensions - 4; l++)
                     {
                         float pred = span[(4 + l) * dim + j];
 
-                        if (pred < _model.Confidence || pred < class_conf[_model.Labels[l].Name]) continue;
-                        YoloLabel label = _model.Labels[l];
-                        result.Add(new(label, new(xMin, yMin, xMax - xMin, yMax - yMin), pred));
+                        if (!(pred < _model.Confidence || pred < class_conf[_model.Labels[l].Name]))
+                        {
+                            result.Add(new(_model.Labels[l], new(x_min * gain_inv, y_min * gain_inv, width, height), pred));
+                        }
                     }
                 });
             });
