@@ -12,10 +12,10 @@ namespace YOLO
         int Imgsz { get; set; }
         readonly int MAX_POSSIBLE_OBJECT;
         readonly int N_CLASS;
+        readonly int col_len;
         Dictionary<string, Color>? Labels { get; set; }
         Bitmap resized_img { get; set; }
         Graphics graphics { get; set; }
-        readonly int col_len;
         NamedOnnxValue[] namedOnnxValues { get; set; }
         public RTDETR(string model_path, bool use_cuda)
         {
@@ -60,7 +60,8 @@ namespace YOLO
         {
             ResizeImage(image);
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img));
-            return Suppress(GetBboxes_n_Scores(InferenceSession.Run(namedOnnxValues, OutputData).ElementAt(0).AsTensor<float>(), conf, class_conf, image.Width, image.Height), iou_conf);
+            return Suppress(GetBboxes_n_Scores(InferenceSession.Run(namedOnnxValues, OutputData).ElementAt(0).AsTensor<float>(),
+                conf, class_conf, image.Width, image.Height), iou_conf);
         }
 
         public List<YoloPrediction> GetBboxes_n_Scores(Tensor<float> input, float conf, Dictionary<string, float> class_conf, int image_width, int image_height)

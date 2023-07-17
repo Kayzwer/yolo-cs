@@ -69,22 +69,10 @@ namespace YOLO
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
         {
-            Bitmap resized;
-
-            if (img.Width != _model.Width || img.Height != _model.Height)
+            NamedOnnxValue[] inputs = new[] // add image as onnx input
             {
-                resized = Utils.ResizeImage(img, _model.Width, _model.Height); // fit image size to specified input size
-            }
-            else
-            {
-                resized = new(img);
-            }
-
-            List<NamedOnnxValue> inputs = new() // add image as onnx input
-            {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
             };
-
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> result = _inferenceSession.Run(inputs); // run inference
 
             List<DenseTensor<float>> output = new();
@@ -165,20 +153,9 @@ namespace YOLO
 
         private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Inference(Image img)
         {
-            Bitmap resized;
-
-            if (img.Width != _model.Width || img.Height != _model.Height)
-            {
-                resized = Utils.ResizeImage(img, _model.Width, _model.Height); // fit image size to specified input size
-            }
-            else
-            {
-                resized = img as Bitmap ?? new Bitmap(img);
-            }
-
             NamedOnnxValue[] inputs = new[] // add image as onnx input
             {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
             };
 
             return _inferenceSession.Run(inputs, _model.Outputs); // run inference
@@ -196,10 +173,10 @@ namespace YOLO
             ConcurrentBag<YoloPrediction> result = new();
 
             var (w, h) = ((float)image.Width, (float)image.Height); // image w and h
-            var (xGain, yGain) = (_model.Width / w, _model.Height / h); // x, y gains
+            var (xGain, yGain) = (Imgsz / w, Imgsz / h); // x, y gains
             float gain = Math.Min(xGain, yGain); // gain = resized / original
-            float gain_inv = 1 / gain;
-            var (xPad, yPad) = ((_model.Width - w * gain) * 0.5f, (_model.Height - h * gain) * 0.5f); // left, right pads
+            float gain_inv = 1.0f / gain;
+            var (xPad, yPad) = ((Imgsz - w * gain) * 0.5f, (Imgsz - h * gain) * 0.5f); // left, right pads
 
             Parallel.For(0, (int)output.Length / _model.Dimensions, i =>
             {
@@ -235,8 +212,6 @@ namespace YOLO
         private void get_input_details()
         {
             Imgsz = _inferenceSession.InputMetadata["images"].Dimensions[2];
-            _model.Height = Imgsz;
-            _model.Width = Imgsz;
         }
 
         private void get_output_details()

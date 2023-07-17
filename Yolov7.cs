@@ -57,21 +57,19 @@ namespace YOLO
 
         private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf)
         {
-            var result = new ConcurrentBag<YoloPrediction>();
-
+            ConcurrentBag<YoloPrediction> result = new();
             var (w, h) = (image.Width, image.Height); // image w and h
-            var (xGain, yGain) = (_model.Width / (float)w, _model.Height / (float)h); // x, y gains
-            var gain = Math.Min(xGain, yGain); // gain = resized / original
-
-            var (xPad, yPad) = ((_model.Width - w * gain) * 0.5f, (_model.Height - h * gain) * 0.5f); // left, right pads
+            var (xGain, yGain) = (Imgsz / (float)w, Imgsz / (float)h); // x, y gains
+            float gain = Math.Min(xGain, yGain); // gain = resized / original
+            float gain_inv = 1.0f / gain;
+            var (xPad, yPad) = ((Imgsz - w * gain) * 0.5f, (Imgsz - h * gain) * 0.5f); // left, right pads
 
             Parallel.For(0, output.Dimensions[0], i =>
             {
-                var span = output.Buffer.Span[(i * output.Strides[0])..];
-                var label = _model.Labels[(int)span[5]];
+                Span<float> span = output.Buffer.Span[(i * output.Strides[0])..];
+                YoloLabel label = _model.Labels[(int)span[5]];
                 if (span[6] >= class_conf[label.Name] && span[6] >= conf)
                 {
-                    float gain_inv = 1 / gain;
                     float xMin = (span[1] - xPad) * gain_inv;
                     float yMin = (span[2] - yPad) * gain_inv;
                     float xMax = (span[3] - xPad) * gain_inv;
@@ -79,7 +77,6 @@ namespace YOLO
                     result.Add(new(label, new(xMin, yMin, xMax - xMin, yMax - yMin), span[6]));
                 }
             });
-
             return result.ToList();
         }
 
@@ -106,7 +103,7 @@ namespace YOLO
 
         private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Inference(Image img)
         {
-            var inputs = new[] // add image as onnx input
+            NamedOnnxValue[] inputs = new[] // add image as onnx input
             {
                 NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
             };
@@ -117,8 +114,6 @@ namespace YOLO
         private void get_input_details()
         {
             Imgsz = _inferenceSession.InputMetadata["images"].Dimensions[2];
-            _model.Height = Imgsz;
-            _model.Width = Imgsz;
         }
 
         private void get_output_details()
@@ -135,9 +130,9 @@ namespace YOLO
 
         public override List<YoloPrediction> Predict(Bitmap img, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
-            using var outputs = Inference(img);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = Inference(img);
             string firstOutput = _model.Outputs[0];
-            var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
+            DenseTensor<float> output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
             return Suppress(ParseDetect(output, img, class_conf, conf_thres), iou_thres);
         }
 

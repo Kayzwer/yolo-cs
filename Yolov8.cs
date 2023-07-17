@@ -87,15 +87,13 @@ namespace YOLO
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
         {
-            List<NamedOnnxValue> inputs = new()
+            NamedOnnxValue[] inputs = new[]
             {
                 NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
             };
-
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> result = _inferenceSession.Run(inputs);
 
             List<DenseTensor<float>> output = new();
-
 
             foreach (string item in _model.Outputs) // add outputs for processing
             {
@@ -151,7 +149,7 @@ namespace YOLO
             var (w, h) = ((float)image.Width, (float)image.Height);
             var (xGain, yGain) = (Imgsz / w, Imgsz / h);
             float gain = Math.Min(xGain, yGain);
-            float gain_inv = 1 / gain;
+            float gain_inv = 1.0f / gain;
             var (xPad, yPad) = ((Imgsz - w * gain) * 0.5f, (Imgsz - h * gain) * 0.5f);
 
             Parallel.For(0, output.Dimensions[0], i =>
@@ -181,7 +179,6 @@ namespace YOLO
                     }
                 });
             });
-
             return result.ToList();
         }
 
