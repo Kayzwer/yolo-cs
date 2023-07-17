@@ -1,7 +1,6 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Collections.Concurrent;
-using System.Drawing.Drawing2D;
 using YOLO.Extentions;
 using YOLO.Models;
 
@@ -160,7 +159,7 @@ namespace YOLO
                 Parallel.For(0, (int)(output.Length / output.Dimensions[1]), j =>
                 {
                     int dim = output.Strides[1];
-                    var span = output.Buffer.Span[(i * output.Strides[0])..];
+                    Span<float> span = output.Buffer.Span[(i * output.Strides[0])..];
 
                     float a = span[j];
                     float b = span[dim + j];
@@ -195,7 +194,6 @@ namespace YOLO
         {
             _model.Outputs = _inferenceSession.OutputMetadata.Keys.ToArray();
             _model.Dimensions = _inferenceSession.OutputMetadata[_model.Outputs[0]].Dimensions[1];
-            _model.UseDetect = !_model.Outputs.Any(x => x == "score");
             N_Class = _inferenceSession.OutputMetadata.ToArray()[0].Value.Dimensions[1] - 4;
         }
 

@@ -125,7 +125,6 @@ namespace YOLO
         {
             _model.Outputs = _inferenceSession.OutputMetadata.Keys.ToArray();
             _model.Dimensions = _inferenceSession.OutputMetadata[_model.Outputs[0]].Dimensions[1];
-            _model.UseDetect = !_model.Outputs.Any(x => x == "score");
             N_Class = _inferenceSession.OutputMetadata.ToArray()[0].Value.Dimensions[1] - 4;
         }
 

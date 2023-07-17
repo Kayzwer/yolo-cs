@@ -112,7 +112,7 @@ namespace YOLO.Extentions
             using Graphics graphics = Graphics.FromImage(image);
             foreach (YoloPrediction prediction in predictions) // iterate predictions to draw results
             {
-                double score = Math.Round(prediction.Score, 2);
+                float score = (float)Math.Round(prediction.Score, 2);
                 graphics.DrawRectangles(new Pen(prediction.Label.Color, bounding_box_thickness), new[] { prediction.Rectangle });
                 var (x, y) = (prediction.Rectangle.X, prediction.Rectangle.Y);
                 graphics.DrawString($"{prediction.Label.Name} ({score})",

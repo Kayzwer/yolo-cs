@@ -1,5 +1,6 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using Microsoft.VisualBasic.Logging;
 using System.Collections.Concurrent;
 using System.Configuration;
 using YOLO.Extentions;
@@ -13,7 +14,7 @@ namespace YOLO
     public class Yolov5 : Yolo, IDisposable
     {
         private readonly InferenceSession _inferenceSession;
-        private readonly YoloModel _model = new YoloModel();
+        private readonly YoloModel _model = new();
         int Imgsz { get; set; }
         int N_Class { get; set; }
 
@@ -61,19 +62,9 @@ namespace YOLO
 
         public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
-            if (conf_thres > 0f)
-            {
-                _model.Confidence = conf_thres;
-                _model.MulConfidence = conf_thres + 0.05f;
-            }
 
-            if (iou_thres > 0f)
-            {
-                _model.Overlap = iou_thres;
-            }
-
-            using var outputs = Inference(image);
-            return Suppress(ParseOutput(outputs, image, class_conf), iou_thres);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = Inference(image);
+            return Suppress(ParseOutput(outputs, image, class_conf, conf_thres), iou_thres);
         }
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
@@ -98,7 +89,7 @@ namespace YOLO
 
             List<DenseTensor<float>> output = new();
 
-            foreach (var item in _model.Outputs) // add outputs for processing
+            foreach (string item in _model.Outputs) // add outputs for processing
             {
                 output.Add(result.First(x => x.Name == item).Value as DenseTensor<float>);
             }
@@ -137,9 +128,10 @@ namespace YOLO
                 deno += (float)Math.Exp(num);
             }
 
+            float deno_inv = 1 / deno;
             for (int i = 0; i < prob_vec.Length; ++i)
             {
-                prob_vec[i] = (float)Math.Exp(input[i]) / deno;
+                prob_vec[i] = (float)Math.Exp(input[i]) * deno_inv;
             }
 
             return prob_vec;
@@ -184,7 +176,7 @@ namespace YOLO
                 resized = img as Bitmap ?? new Bitmap(img);
             }
 
-            var inputs = new[] // add image as onnx input
+            NamedOnnxValue[] inputs = new[] // add image as onnx input
             {
                 NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized))
             };
@@ -192,67 +184,52 @@ namespace YOLO
             return _inferenceSession.Run(inputs, _model.Outputs); // run inference
         }
 
-        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf)
+        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf, float conf_thres)
         {
-            if (_model.UseDetect)
-            {
-                string firstOutput = _model.Outputs[0];
-                var output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
-                return ParseDetect(output, image, class_conf);
-            }
-
-            return ParseSigmoid(outputs, image);
+            string firstOutput = _model.Outputs[0];
+            DenseTensor<float> output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
+            return ParseDetect(output, image, class_conf, conf_thres);
         }
 
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf_thres)
         {
-            var result = new ConcurrentBag<YoloPrediction>();
+            ConcurrentBag<YoloPrediction> result = new();
 
-            var (w, h) = (image.Width, image.Height); // image w and h
-            var (xGain, yGain) = (_model.Width / (float)w, _model.Height / (float)h); // x, y gains
-            var gain = Math.Min(xGain, yGain); // gain = resized / original
-
+            var (w, h) = ((float)image.Width, (float)image.Height); // image w and h
+            var (xGain, yGain) = (_model.Width / w, _model.Height / h); // x, y gains
+            float gain = Math.Min(xGain, yGain); // gain = resized / original
+            float gain_inv = 1 / gain;
             var (xPad, yPad) = ((_model.Width - w * gain) * 0.5f, (_model.Height - h * gain) * 0.5f); // left, right pads
 
             Parallel.For(0, (int)output.Length / _model.Dimensions, i =>
             {
-                var span = output.Buffer.Span.Slice(i * _model.Dimensions);
-                if (span[4] <= _model.Confidence) return; // skip low obj_conf results
+                var span = output.Buffer.Span[(i * _model.Dimensions)..];
+                if (span[4] <= conf_thres) return; // skip low obj_conf results
 
                 for (int j = 5; j < _model.Dimensions; j++)
                 {
                     span[j] *= span[4]; // mul_conf = obj_conf * cls_conf
                 }
 
-                float xMin = (span[0] - span[2] * 0.5f - xPad) / gain; // unpad bbox tlx to original
-                float yMin = (span[1] - span[3] * 0.5f - yPad) / gain; // unpad bbox tly to original
-                float xMax = (span[0] + span[2] * 0.5f - xPad) / gain; // unpad bbox brx to original
-                float yMax = (span[1] + span[3] * 0.5f - yPad) / gain; // unpad bbox bry to original
+                float xMin = (span[0] - span[2] * 0.5f - xPad) * gain_inv; // unpad bbox tlx to original
+                float yMin = (span[1] - span[3] * 0.5f - yPad) * gain_inv; // unpad bbox tly to original
+                float xMax = (span[0] + span[2] * 0.5f - xPad) * gain_inv; // unpad bbox brx to original
+                float yMax = (span[1] + span[3] * 0.5f - yPad) * gain_inv; // unpad bbox bry to original
 
-                xMin = Utils.Clamp(xMin, 0, w - 0); // clip bbox tlx to boundaries
-                yMin = Utils.Clamp(yMin, 0, h - 0); // clip bbox tly to boundaries
+                xMin = Utils.Clamp(xMin, 0, w); // clip bbox tlx to boundaries
+                yMin = Utils.Clamp(yMin, 0, h); // clip bbox tly to boundaries
                 xMax = Utils.Clamp(xMax, 0, w - 1); // clip bbox brx to boundaries
                 yMax = Utils.Clamp(yMax, 0, h - 1); // clip bbox bry to boundaries
 
                 for (int k = 5; k < _model.Dimensions; k++)
                 {
                     YoloLabel label = _model.Labels[k - 5];
-                    if (span[k] <= _model.MulConfidence || span[k] <= class_conf[label.Name]) continue; // skip low mul_conf results
+                    if (span[k] <= conf_thres || span[k] <= class_conf[label.Name]) continue; // skip low mul_conf results
                     result.Add(new(label, new(xMin, yMin, xMax - xMin, yMax - yMin), span[k]));
                 }
             });
 
             return result.ToList();
-        }
-
-        private List<YoloPrediction> ParseSigmoid(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> output, Image image)
-        {
-            return new List<YoloPrediction>();
-        }
-
-        private void prepare_input(Image img)
-        {
-            var bmp = Utils.ResizeImage(img, _model.Width, _model.Height);
         }
 
         private void get_input_details()
@@ -266,7 +243,6 @@ namespace YOLO
         {
             _model.Outputs = _inferenceSession.OutputMetadata.Keys.ToArray();
             _model.Dimensions = _inferenceSession.OutputMetadata[_model.Outputs[0]].Dimensions[2];
-            _model.UseDetect = !_model.Outputs.Any(x => x == "score");
             N_Class = _inferenceSession.OutputMetadata.ToArray()[0].Value.Dimensions[1] - 4;
         }
 
