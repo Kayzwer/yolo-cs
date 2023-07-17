@@ -11,9 +11,8 @@ namespace YOLO
     {
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new();
+        int N_Class { get; set; }
         int Imgsz { get; set; }
-        Bitmap resized_img { get; set; }
-        Graphics graphics { get; set; }
 
         public Yolov8(string modelPath, bool useCuda = false)
         {
@@ -40,17 +39,9 @@ namespace YOLO
             // Get model info
             get_input_details();
             get_output_details();
-            resized_img = new(Imgsz, Imgsz);
-            graphics = Graphics.FromImage(resized_img);
-            graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
             using Bitmap bitmap = new(Imgsz, Imgsz);
             NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap)) };
             _inferenceSession.Run(inputs, _model.Outputs);
-        }
-
-        public void ResizeImage(Image image)
-        {
-            graphics.DrawImage(image, 0, 0, Imgsz, Imgsz);
         }
 
         public override void SetupLabels(Dictionary<string, Color> color_mapper)
@@ -63,10 +54,10 @@ namespace YOLO
             }
         }
 
-        public List<YoloPrediction> Predict(Image image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
+        public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = Inference(image);
-            return Suppress(ParseOutput(outputs, image, class_conf), iou_thres);
+            return Suppress(ParseOutput(outputs, image, class_conf, conf_thres), iou_thres);
         }
 
         /// <summary>
@@ -97,11 +88,9 @@ namespace YOLO
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
         {
-            ResizeImage(img);
-
             List<NamedOnnxValue> inputs = new()
             {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
             };
 
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> result = _inferenceSession.Run(inputs);
@@ -141,24 +130,22 @@ namespace YOLO
 
         private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Inference(Image img)
         {
-            ResizeImage(img);
-
             NamedOnnxValue[] inputs = new[]
             {
-                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img))
+                NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
             };
 
             return _inferenceSession.Run(inputs, _model.Outputs);
         }
 
-        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf)
+        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf, float conf)
         {
             string firstOutput = _model.Outputs[0];
             DenseTensor<float> output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
-            return ParseDetect(output, image, class_conf);
+            return ParseDetect(output, image, class_conf, conf);
         }
 
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf)
         {
             ConcurrentBag<YoloPrediction> result = new();
 
@@ -188,7 +175,7 @@ namespace YOLO
                     {
                         float pred = span[(4 + l) * dim + j];
 
-                        if (!(pred < _model.Confidence || pred < class_conf[_model.Labels[l].Name]))
+                        if (!(pred < conf || pred < class_conf[_model.Labels[l].Name]))
                         {
                             result.Add(new(_model.Labels[l], new(x_min * gain_inv, y_min * gain_inv, width, height), pred));
                         }
@@ -208,7 +195,8 @@ namespace YOLO
         {
             _model.Outputs = _inferenceSession.OutputMetadata.Keys.ToArray();
             _model.Dimensions = _inferenceSession.OutputMetadata[_model.Outputs[0]].Dimensions[1];
-            _model.UseDetect = !(_model.Outputs.Any(x => x == "score"));
+            _model.UseDetect = !_model.Outputs.Any(x => x == "score");
+            N_Class = _inferenceSession.OutputMetadata.ToArray()[0].Value.Dimensions[1] - 4;
         }
 
         public void Dispose()
@@ -216,19 +204,9 @@ namespace YOLO
             _inferenceSession.Dispose();
         }
 
-        public override List<YoloPrediction> Predict(Bitmap clone)
+        public override int GetModelNClass()
         {
-            return Predict(clone);
-        }
-
-        public override List<YoloPrediction> Predict(Bitmap clone, float conf_thres = 0, float iou_thres = 0)
-        {
-            return Predict(clone, conf_thres, iou_thres);
-        }
-
-        public override List<YoloPrediction> Predict(Bitmap clone, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
-        {
-            return Predict(clone, class_conf, conf_thres, iou_thres);
+            return N_Class;
         }
     }
 }

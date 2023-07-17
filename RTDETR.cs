@@ -56,17 +56,7 @@ namespace YOLO
             Labels = labels;
         }
 
-        public override List<YoloPrediction> Predict(Bitmap image, float conf, float iou_conf = .45f)
-        {
-            Dictionary<string, float> class_conf = new();
-            foreach (string class_name in Labels.Keys)
-            {
-                class_conf[class_name] = 0.5f;
-            }
-            return Predict(image, class_conf);
-        }
-
-        public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf = 0, float iou_conf = 0)
+        public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf, float iou_conf)
         {
             ResizeImage(image);
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img));
@@ -115,11 +105,6 @@ namespace YOLO
             graphics.DrawImage(image, 0, 0, Imgsz, Imgsz);
         }
 
-        public override List<YoloPrediction> Predict(Bitmap clone)
-        {
-            return Predict(clone, .25f);
-        }
-
         private List<YoloPrediction> Suppress(List<YoloPrediction> items, float iou_conf)
         {
             List<YoloPrediction> result = new(items);
@@ -141,6 +126,11 @@ namespace YOLO
                 }
             }
             return result;
+        }
+
+        public override int GetModelNClass()
+        {
+            return N_CLASS;
         }
     }
 }
