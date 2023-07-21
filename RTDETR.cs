@@ -3,6 +3,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Drawing.Drawing2D;
 using YOLO.Extentions;
 
+
 namespace YOLO
 {
     public class RTDETR : Yolo
@@ -109,7 +110,7 @@ namespace YOLO
         private List<YoloPrediction> Suppress(List<YoloPrediction> items, float iou_conf)
         {
             List<YoloPrediction> result = new(items);
-            foreach (YoloPrediction item in items) // iterate every prediction
+            foreach (YoloPrediction item in items)
             {
                 foreach (YoloPrediction current in result.ToList()) // make a copy for each iteration
                 {

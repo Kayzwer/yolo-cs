@@ -2,6 +2,7 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 
+
 namespace YOLO.Extentions
 {
     public static class Utils
@@ -101,14 +102,13 @@ namespace YOLO.Extentions
         public static Image DrawBoundingBox(Image image, List<YoloPrediction> predictions, int bounding_box_thickness, int font_size)
         {
             using Graphics graphics = Graphics.FromImage(image);
-            foreach (YoloPrediction prediction in predictions) // iterate predictions to draw results
+            for (int i = 0; i < predictions.Count; i++)
             {
-                float score = (float)Math.Round(prediction.Score, 2);
-                graphics.DrawRectangles(new Pen(prediction.Label.Color, bounding_box_thickness), new[] { prediction.Rectangle });
-                var (x, y) = (prediction.Rectangle.X, prediction.Rectangle.Y);
-                graphics.DrawString($"{prediction.Label.Name} ({score})",
-                                new Font("Consolas", font_size, GraphicsUnit.Pixel), new SolidBrush(prediction.Label.Color),
-                                new PointF(x, y));
+                float score = (float)Math.Round(predictions[i].Score, 2);
+                graphics.DrawRectangles(new(predictions[i].Label.Color, bounding_box_thickness), new[] { predictions[i].Rectangle });
+                graphics.DrawString($"{predictions[i].Label.Name} ({score})",
+                                new("Consolas", font_size, GraphicsUnit.Pixel), new SolidBrush(predictions[i].Label.Color),
+                                new PointF(predictions[i].Rectangle.X, predictions[i].Rectangle.Y));
             }
             return image;
         }

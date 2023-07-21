@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using YOLO.Extentions;
 using YOLO.Models;
 
+
 namespace YOLO
 {
     /// <summary>
@@ -114,7 +115,7 @@ namespace YOLO
                 deno += (float)Math.Exp(num);
             }
 
-            float deno_inv = 1 / deno;
+            float deno_inv = 1.0f / deno;
             for (int i = 0; i < prob_vec.Length; ++i)
             {
                 prob_vec[i] = (float)Math.Exp(input[i]) * deno_inv;
@@ -186,15 +187,10 @@ namespace YOLO
                     span[j] *= span[4]; // mul_conf = obj_conf * cls_conf
                 }
 
-                float xMin = (span[0] - span[2] * 0.5f - xPad) * gain_inv; // unpad bbox tlx to original
-                float yMin = (span[1] - span[3] * 0.5f - yPad) * gain_inv; // unpad bbox tly to original
-                float xMax = (span[0] + span[2] * 0.5f - xPad) * gain_inv; // unpad bbox brx to original
-                float yMax = (span[1] + span[3] * 0.5f - yPad) * gain_inv; // unpad bbox bry to original
-
-                xMin = Utils.Clamp(xMin, 0, w); // clip bbox tlx to boundaries
-                yMin = Utils.Clamp(yMin, 0, h); // clip bbox tly to boundaries
-                xMax = Utils.Clamp(xMax, 0, w - 1); // clip bbox brx to boundaries
-                yMax = Utils.Clamp(yMax, 0, h - 1); // clip bbox bry to boundaries
+                float xMin = Utils.Clamp((span[0] - span[2] * 0.5f - xPad) * gain_inv, 0, w); // unpad bbox tlx to original
+                float yMin = Utils.Clamp((span[1] - span[3] * 0.5f - yPad) * gain_inv, 0, h); // unpad bbox tly to original
+                float xMax = Utils.Clamp((span[0] + span[2] * 0.5f - xPad) * gain_inv, 0, w - 1); // unpad bbox brx to original
+                float yMax = Utils.Clamp((span[1] + span[3] * 0.5f - yPad) * gain_inv, 0, h - 1); // unpad bbox bry to original
 
                 for (int k = 5; k < _model.Dimensions; k++)
                 {
