@@ -1,8 +1,6 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using Microsoft.VisualBasic.Logging;
 using System.Collections.Concurrent;
-using System.Configuration;
 using YOLO.Extentions;
 using YOLO.Models;
 
