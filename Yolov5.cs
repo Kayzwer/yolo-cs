@@ -212,7 +212,7 @@ namespace YOLO
         {
             _model.Outputs = _inferenceSession.OutputMetadata.Keys.ToArray();
             _model.Dimensions = _inferenceSession.OutputMetadata[_model.Outputs[0]].Dimensions[2];
-            N_Class = _inferenceSession.OutputMetadata.ToArray()[0].Value.Dimensions[1] - 4;
+            N_Class = _inferenceSession.OutputMetadata.ToArray()[0].Value.Dimensions[2] - 5;
         }
 
         public void Dispose()
