@@ -53,7 +53,7 @@ namespace YOLO
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap));
             InferenceSession.Run(namedOnnxValues, OutputData);
             col_len_cache = new();
-            for (int i = 0; i < 21; i++)
+            for (int i = 0; i < col_len; i++)
             {
                 col_len_cache.Add(i, i * MAX_POSSIBLE_OBJECT);
             }
