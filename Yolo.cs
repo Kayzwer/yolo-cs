@@ -1,4 +1,7 @@
-﻿namespace YOLO
+﻿using System.Drawing;
+
+
+namespace YOLO
 {
     public abstract class Yolo
     {

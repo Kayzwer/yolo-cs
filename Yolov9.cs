@@ -7,11 +7,12 @@ using System.Drawing;
 
 namespace YOLO
 {
-    public class RTDETR : Yolo
+    public class Yolov9 : Yolo
     {
         InferenceSession InferenceSession { get; set; }
         string[] OutputData { get; set; }
         int Imgsz { get; set; }
+        float Imgsz_inv { get; set; }
         readonly int MAX_POSSIBLE_OBJECT;
         readonly int N_CLASS;
         readonly int col_len;
@@ -19,7 +20,8 @@ namespace YOLO
         Bitmap resized_img { get; set; }
         Graphics graphics { get; set; }
         NamedOnnxValue[] namedOnnxValues { get; set; }
-        public RTDETR(string model_path, bool use_cuda)
+        Dictionary<int, int> col_len_caches { get; set; }
+        public Yolov9(string model_path, bool use_cuda)
         {
             if (use_cuda)
             {
@@ -40,10 +42,11 @@ namespace YOLO
                 InferenceSession = new(model_path);
             }
             Imgsz = InferenceSession.InputMetadata["images"].Dimensions[2];
-            MAX_POSSIBLE_OBJECT = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[1];
+            Imgsz_inv = 1.0f / Imgsz;
+            MAX_POSSIBLE_OBJECT = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[2];
             OutputData = InferenceSession.OutputMetadata.Keys.ToArray();
-            col_len = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[2];
-            N_CLASS =  col_len - 4;
+            col_len = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[1];
+            N_CLASS = col_len - 4;
             resized_img = new(Imgsz, Imgsz);
             graphics = Graphics.FromImage(resized_img);
             graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
@@ -51,6 +54,11 @@ namespace YOLO
             using Bitmap bitmap = new(Imgsz, Imgsz);
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap));
             InferenceSession.Run(namedOnnxValues, OutputData);
+            col_len_caches = [];
+            for (int i = 0; i < col_len; i++)
+            {
+                col_len_caches.Add(i, i * MAX_POSSIBLE_OBJECT);
+            }
         }
 
         public override void SetupLabels(Dictionary<string, Color> labels)
@@ -69,18 +77,17 @@ namespace YOLO
         public List<YoloPrediction> GetBboxes_n_Scores(Tensor<float> input, float conf, Dictionary<string, float> class_conf, int image_width, int image_height)
         {
             List<YoloPrediction> predictions = [];
-            Parallel.For(0, MAX_POSSIBLE_OBJECT, j =>
+            for (int i = 0; i < MAX_POSSIBLE_OBJECT; i++)
             {
                 float max_score = .0f;
                 int max_score_idx = 0;
-                int row_cache = j * col_len;
-                for (int i = 0; i < N_CLASS; i++)
+                for (int j = 4; j < col_len; j++)
                 {
-                    float value = input.ElementAt(row_cache + i + 4);
+                    float value = input.ElementAt(col_len_caches[j] + i);
                     if (value > max_score)
                     {
                         max_score = value;
-                        max_score_idx = i;
+                        max_score_idx = j - 4;
                         if (max_score >= 0.5f)
                         {
                             break;
@@ -89,17 +96,19 @@ namespace YOLO
                 }
                 if (max_score >= conf && max_score >= class_conf.ElementAt(max_score_idx).Value)
                 {
+                    float width_scale = image_width * Imgsz_inv;
+                    float height_scale = image_height * Imgsz_inv;
                     predictions.Add(
                         new(
                             new(max_score_idx,
                                 Labels.ElementAt(max_score_idx).Key,
                                 Labels.ElementAt(max_score_idx).Value),
-                            new((input.ElementAt(row_cache) - input.ElementAt(row_cache + 2) * 0.5f) * image_width,
-                                (input.ElementAt(row_cache + 1) - input.ElementAt(row_cache + 3) * 0.5f) * image_height,
-                                input.ElementAt(row_cache + 2) * image_width, input.ElementAt(row_cache + 3) * image_height),
+                            new((input.ElementAt(col_len_caches[0] + i) - input.ElementAt(col_len_caches[2] + i) * 0.5f) * width_scale,
+                                (input.ElementAt(col_len_caches[1] + i) - input.ElementAt(col_len_caches[3] + i) * 0.5f) * height_scale,
+                                input.ElementAt(col_len_caches[2] + i) * width_scale, input.ElementAt(col_len_caches[3] + i) * height_scale),
                             max_score));
                 }
-            });
+            }
             return predictions;
         }
 

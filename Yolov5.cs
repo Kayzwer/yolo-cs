@@ -1,6 +1,7 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Collections.Concurrent;
+using System.Drawing;
 using YOLO.Extentions;
 using YOLO.Models;
 
@@ -45,7 +46,7 @@ namespace YOLO
             get_output_details();
 
             using Bitmap bitmap = new(Imgsz, Imgsz);
-            NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap)) };
+            NamedOnnxValue[] inputs = [NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap))];
             _inferenceSession.Run(inputs, _model.Outputs);
         }
 

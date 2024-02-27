@@ -6,6 +6,6 @@
 
         public string[] Outputs { get; set; }
 
-        public List<YoloLabel> Labels { get; set; } = new List<YoloLabel>();
+        public List<YoloLabel> Labels { get; set; } = [];
     }
 }

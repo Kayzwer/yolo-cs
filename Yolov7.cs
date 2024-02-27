@@ -1,6 +1,7 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Collections.Concurrent;
+using System.Drawing;
 using YOLO.Extentions;
 using YOLO.Models;
 
@@ -10,7 +11,7 @@ namespace YOLO
     public class Yolov7 : Yolo, IDisposable
     {
         private readonly InferenceSession _inferenceSession;
-        private readonly YoloModel _model = new YoloModel();
+        private readonly YoloModel _model = new();
         int Imgsz { get; set; }
         int N_Class { get; set; }
 
@@ -40,7 +41,7 @@ namespace YOLO
             get_input_details();
             get_output_details();
             using Bitmap bitmap = new(Imgsz, Imgsz);
-            NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap)) };
+            NamedOnnxValue[] inputs = [NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap))];
             _inferenceSession.Run(inputs, _model.Outputs);
         }
 
@@ -56,7 +57,7 @@ namespace YOLO
 
         private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf)
         {
-            ConcurrentBag<YoloPrediction> result = new();
+            ConcurrentBag<YoloPrediction> result = [];
             var (w, h) = (image.Width, image.Height); // image w and h
             var (xGain, yGain) = (Imgsz / (float)w, Imgsz / (float)h); // x, y gains
             float gain = Math.Min(xGain, yGain); // gain = resized / original

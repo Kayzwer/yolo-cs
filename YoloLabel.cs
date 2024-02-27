@@ -1,4 +1,7 @@
-﻿namespace YOLO
+﻿using System.Drawing;
+
+
+namespace YOLO
 {
     public class YoloLabel
     {

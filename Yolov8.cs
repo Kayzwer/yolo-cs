@@ -1,6 +1,7 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Collections.Concurrent;
+using System.Drawing;
 using YOLO.Extentions;
 using YOLO.Models;
 
@@ -40,7 +41,7 @@ namespace YOLO
             get_input_details();
             get_output_details();
             using Bitmap bitmap = new(Imgsz, Imgsz);
-            NamedOnnxValue[] inputs = { NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap)) };
+            NamedOnnxValue[] inputs = [NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap))];
             _inferenceSession.Run(inputs, _model.Outputs);
         }
 
@@ -88,13 +89,13 @@ namespace YOLO
 
         public YoloClassifyPrediction ClassifyPredict(Image img)
         {
-            NamedOnnxValue[] inputs = new[]
-            {
+            NamedOnnxValue[] inputs =
+            [
                 NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
-            };
+            ];
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> result = _inferenceSession.Run(inputs);
 
-            List<DenseTensor<float>> output = new();
+            List<DenseTensor<float>> output = [];
 
             foreach (string item in _model.Outputs) // add outputs for processing
             {
@@ -123,15 +124,15 @@ namespace YOLO
                     break;
                 }
             }
-            return new float[] { max_index, max_prob };
+            return [max_index, max_prob];
         }
 
         private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Inference(Image img)
         {
-            NamedOnnxValue[] inputs = new[]
-            {
+            NamedOnnxValue[] inputs =
+            [
                 NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(Utils.ResizeImage(img, Imgsz, Imgsz)))
-            };
+            ];
 
             return _inferenceSession.Run(inputs, _model.Outputs);
         }
@@ -180,7 +181,7 @@ namespace YOLO
                     }
                 });
             });
-            return result.ToList();
+            return [.. result];
         }
 
         private void get_input_details()
