@@ -8,7 +8,7 @@ using YOLO.Models;
 
 namespace YOLO
 {
-    public class Yolov8 : Yolo, IDisposable
+    public class Yolov8 : IDisposable
     {
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new();
@@ -45,7 +45,7 @@ namespace YOLO
             _inferenceSession.Run(inputs, _model.Outputs);
         }
 
-        public override void SetupLabels(Dictionary<string, Color> color_mapper)
+        public void SetupLabels(Dictionary<string, Color> color_mapper)
         {
             int i = 0;
             foreach (KeyValuePair<string, Color> keyValuePair in color_mapper)
@@ -55,10 +55,10 @@ namespace YOLO
             }
         }
 
-        public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
+        public List<YoloPrediction> Predict(Bitmap image, float conf_thres = 0, float iou_thres = 0)
         {
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = Inference(image);
-            return Suppress(ParseOutput(outputs, image, class_conf, conf_thres), iou_thres);
+            return Suppress(ParseOutput(outputs, image, conf_thres), iou_thres);
         }
 
         /// <summary>
@@ -137,14 +137,14 @@ namespace YOLO
             return _inferenceSession.Run(inputs, _model.Outputs);
         }
 
-        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, Dictionary<string, float> class_conf, float conf)
+        private List<YoloPrediction> ParseOutput(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs, Image image, float conf)
         {
             string firstOutput = _model.Outputs[0];
             DenseTensor<float> output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
-            return ParseDetect(output, image, class_conf, conf);
+            return ParseDetect(output, image, conf);
         }
 
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, float conf)
         {
             ConcurrentBag<YoloPrediction> result = new();
 
@@ -174,7 +174,7 @@ namespace YOLO
                     {
                         float pred = span[(4 + l) * dim + j];
 
-                        if (!(pred < conf || pred < class_conf[_model.Labels[l].Name]))
+                        if (pred >= conf)
                         {
                             result.Add(new(_model.Labels[l], new(x_min * gain_inv, y_min * gain_inv, width, height), pred));
                         }
@@ -199,11 +199,6 @@ namespace YOLO
         public void Dispose()
         {
             _inferenceSession.Dispose();
-        }
-
-        public override int GetModelNClass()
-        {
-            return N_Class;
         }
     }
 }

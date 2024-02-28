@@ -11,7 +11,7 @@ namespace YOLO
     /// <summary>
     /// yolov5、yolov6 模型,不包含nms结果
     /// </summary>
-    public class Yolov5 : Yolo, IDisposable
+    public class Yolov5 : IDisposable
     {
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new();
@@ -50,7 +50,7 @@ namespace YOLO
             _inferenceSession.Run(inputs, _model.Outputs);
         }
 
-        public override void SetupLabels(Dictionary<string, Color> color_mapper)
+        public void SetupLabels(Dictionary<string, Color> color_mapper)
         {
             int i = 0;
             foreach (KeyValuePair<string, Color> keyValuePair in color_mapper)
@@ -60,7 +60,7 @@ namespace YOLO
             }
         }
 
-        public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
+        public List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
 
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = Inference(image);
@@ -219,11 +219,6 @@ namespace YOLO
         public void Dispose()
         {
             _inferenceSession.Dispose();
-        }
-
-        public override int GetModelNClass()
-        {
-            return N_Class;
         }
     }
 }

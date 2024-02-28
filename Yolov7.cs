@@ -8,7 +8,7 @@ using YOLO.Models;
 
 namespace YOLO
 {
-    public class Yolov7 : Yolo, IDisposable
+    public class Yolov7 : IDisposable
     {
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new();
@@ -45,7 +45,7 @@ namespace YOLO
             _inferenceSession.Run(inputs, _model.Outputs);
         }
 
-        public override void SetupLabels(Dictionary<string, Color> color_mapper)
+        public void SetupLabels(Dictionary<string, Color> color_mapper)
         {
             int i = 0;
             foreach (KeyValuePair<string, Color> keyValuePair in color_mapper)
@@ -55,7 +55,7 @@ namespace YOLO
             }
         }
 
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, Dictionary<string, float> class_conf, float conf)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, float conf)
         {
             ConcurrentBag<YoloPrediction> result = [];
             var (w, h) = (image.Width, image.Height); // image w and h
@@ -68,7 +68,7 @@ namespace YOLO
             {
                 Span<float> span = output.Buffer.Span[(i * output.Strides[0])..];
                 YoloLabel label = _model.Labels[(int)span[5]];
-                if (span[6] >= class_conf[label.Name] && span[6] >= conf)
+                if (span[6] >= conf)
                 {
                     float xMin = (span[1] - xPad) * gain_inv;
                     float yMin = (span[2] - yPad) * gain_inv;
@@ -128,17 +128,12 @@ namespace YOLO
             _inferenceSession.Dispose();
         }
 
-        public override List<YoloPrediction> Predict(Bitmap img, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
+        public List<YoloPrediction> Predict(Bitmap img, Dictionary<string, float> class_conf, float conf_thres = 0, float iou_thres = 0)
         {
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = Inference(img);
             string firstOutput = _model.Outputs[0];
             DenseTensor<float> output = (DenseTensor<float>)outputs.First(x => x.Name == firstOutput).Value;
-            return Suppress(ParseDetect(output, img, class_conf, conf_thres), iou_thres);
-        }
-
-        public override int GetModelNClass()
-        {
-            return N_Class;
+            return Suppress(ParseDetect(output, img, conf_thres), iou_thres);
         }
     }
 }

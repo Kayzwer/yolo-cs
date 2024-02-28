@@ -7,7 +7,7 @@ using System.Drawing;
 
 namespace YOLO
 {
-    public class RTDETR : Yolo
+    public class RTDETR
     {
         InferenceSession InferenceSession { get; set; }
         string[] OutputData { get; set; }
@@ -53,20 +53,20 @@ namespace YOLO
             InferenceSession.Run(namedOnnxValues, OutputData);
         }
 
-        public override void SetupLabels(Dictionary<string, Color> labels)
+        public void SetupLabels(Dictionary<string, Color> labels)
         {
             Labels = labels;
         }
 
-        public override List<YoloPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf, float iou_conf)
+        public List<YoloPrediction> Predict(Bitmap image, float conf, float iou_conf)
         {
             ResizeImage(image);
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img));
             return Suppress(GetBboxes_n_Scores(InferenceSession.Run(namedOnnxValues, OutputData).ElementAt(0).AsTensor<float>(),
-                conf, class_conf, image.Width, image.Height), iou_conf);
+                conf, image.Width, image.Height), iou_conf);
         }
 
-        public List<YoloPrediction> GetBboxes_n_Scores(Tensor<float> input, float conf, Dictionary<string, float> class_conf, int image_width, int image_height)
+        public List<YoloPrediction> GetBboxes_n_Scores(Tensor<float> input, float conf, int image_width, int image_height)
         {
             List<YoloPrediction> predictions = [];
             Parallel.For(0, MAX_POSSIBLE_OBJECT, j =>
@@ -87,7 +87,7 @@ namespace YOLO
                         }
                     }
                 }
-                if (max_score >= conf && max_score >= class_conf.ElementAt(max_score_idx).Value)
+                if (max_score >= conf)
                 {
                     predictions.Add(
                         new(
@@ -129,11 +129,6 @@ namespace YOLO
                 }
             }
             return result;
-        }
-
-        public override int GetModelNClass()
-        {
-            return N_CLASS;
         }
     }
 }

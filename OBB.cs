@@ -61,7 +61,7 @@ namespace YOLO
             }
         }
 
-        public List<OBBPrediction> Predict(Bitmap image, Dictionary<string, float> class_conf, float conf, float iou_conf)
+        public List<OBBPrediction> Predict(Bitmap image, float conf, float iou_conf)
         {
             float x_scaler = image.Width * Imgsz_inv;
             float y_scaler = image.Height * Imgsz_inv;
@@ -86,7 +86,7 @@ namespace YOLO
                         }
                     }
                 }
-                if (max_score > conf)
+                if (max_score >= conf)
                 {
                     YoloLabel label = new(max_score_idx, Labels.ElementAt(max_score_idx).Key, Labels.ElementAt(max_score_idx).Value);
                     RectangleF rectangle = new((output.ElementAt(col_len_cache[0] + j) - output.ElementAt(col_len_cache[2] + j) * .5f) * x_scaler,
