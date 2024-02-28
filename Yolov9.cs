@@ -77,6 +77,8 @@ namespace YOLO
         public List<YoloPrediction> GetBboxes_n_Scores(Tensor<float> input, float conf, Dictionary<string, float> class_conf, int image_width, int image_height)
         {
             List<YoloPrediction> predictions = [];
+            float width_scale = image_width * Imgsz_inv;
+            float height_scale = image_height * Imgsz_inv;
             for (int i = 0; i < MAX_POSSIBLE_OBJECT; i++)
             {
                 float max_score = .0f;
@@ -96,8 +98,6 @@ namespace YOLO
                 }
                 if (max_score >= conf && max_score >= class_conf.ElementAt(max_score_idx).Value)
                 {
-                    float width_scale = image_width * Imgsz_inv;
-                    float height_scale = image_height * Imgsz_inv;
                     predictions.Add(
                         new(
                             new(max_score_idx,
