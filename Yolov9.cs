@@ -7,7 +7,7 @@ using System.Drawing;
 
 namespace YOLO
 {
-    public class Yolov9 : Yolo
+    public class Yolov9
     {
         InferenceSession InferenceSession { get; set; }
         string[] OutputData { get; set; }
