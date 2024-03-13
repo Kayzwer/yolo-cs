@@ -14,7 +14,6 @@ namespace YOLO
         int Imgsz { get; set; }
         float Imgsz_inv { get; set; }
         readonly int MAX_POSSIBLE_OBJECT;
-        readonly int N_CLASS;
         readonly int col_len;
         Dictionary<string, Color>? Labels { get; set; }
         Bitmap resized_img { get; set; }
@@ -46,7 +45,6 @@ namespace YOLO
             MAX_POSSIBLE_OBJECT = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[2];
             OutputData = InferenceSession.OutputMetadata.Keys.ToArray();
             col_len = InferenceSession.OutputMetadata.ElementAt(0).Value.Dimensions[1];
-            N_CLASS = col_len - 4;
             resized_img = new(Imgsz, Imgsz);
             graphics = Graphics.FromImage(resized_img);
             graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
