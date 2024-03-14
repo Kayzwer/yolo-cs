@@ -3,6 +3,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Drawing.Drawing2D;
 using YOLO.Extentions;
 using System.Drawing;
+using Newtonsoft.Json;
 
 
 namespace YOLO
@@ -52,7 +53,8 @@ namespace YOLO
             using Bitmap bitmap = new(Imgsz, Imgsz);
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap));
             InferenceSession.Run(namedOnnxValues, OutputData);
-            col_len_cache = new();
+            col_len_cache = [];
+            Labels = [];
             for (int i = 0; i < col_len; i++)
             {
                 col_len_cache.Add(i, i * MAX_POSSIBLE_OBJECT);
@@ -63,11 +65,11 @@ namespace YOLO
         {
             float x_scaler = image.Width * Imgsz_inv;
             float y_scaler = image.Height * Imgsz_inv;
-            List<OBBPrediction> predictions = new();
+            List<OBBPrediction> predictions = [];
             ResizeImage(image);
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(resized_img));
             Tensor<float> output = InferenceSession.Run(namedOnnxValues, OutputData).ElementAt(0).AsTensor<float>();
-            for (int j = 0; j < MAX_POSSIBLE_OBJECT; j++)
+            Parallel.For(0, MAX_POSSIBLE_OBJECT, j =>
             {
                 float max_score = 0f;
                 int max_score_idx = 0;
@@ -94,7 +96,7 @@ namespace YOLO
                     OBBPrediction prediction = new(label, rectangle, angle, max_score);
                     predictions.Add(prediction);
                 }
-            }
+            });
             return Suppress(predictions, iou_conf);
         }
 
@@ -126,9 +128,13 @@ namespace YOLO
             graphics.DrawImage(image, 0, 0, Imgsz, Imgsz);
         }
 
-        public void SetupLabels(Dictionary<string, Color> labels)
+        public void SetupColors(Color[] colors)
         {
-            Labels = labels;
+            Dictionary<int, string> classes = JsonConvert.DeserializeObject<Dictionary<int, string>>(InferenceSession.ModelMetadata.CustomMetadataMap["names"])!;
+            for (int i = 0; i < colors.Length; i++)
+            {
+                Labels.Add(classes.ElementAt(i).Value, colors[i]);
+            }
         }
     }
 }

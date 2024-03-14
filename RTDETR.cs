@@ -3,6 +3,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Drawing.Drawing2D;
 using YOLO.Extentions;
 using System.Drawing;
+using Newtonsoft.Json;
 
 
 namespace YOLO
@@ -19,6 +20,7 @@ namespace YOLO
         Bitmap resized_img { get; set; }
         Graphics graphics { get; set; }
         NamedOnnxValue[] namedOnnxValues { get; set; }
+        Dictionary<int, int> col_len_caches { get; set; }
         public RTDETR(string model_path, bool use_cuda)
         {
             if (use_cuda)
@@ -51,11 +53,21 @@ namespace YOLO
             using Bitmap bitmap = new(Imgsz, Imgsz);
             namedOnnxValues[0] = NamedOnnxValue.CreateFromTensor("images", Utils.ExtractPixels2(bitmap));
             InferenceSession.Run(namedOnnxValues, OutputData);
+            col_len_caches = [];
+            Labels = [];
+            for (int i = 0; i < MAX_POSSIBLE_OBJECT; i++)
+            {
+                col_len_caches.Add(i, i * col_len);
+            }
         }
 
-        public void SetupLabels(Dictionary<string, Color> labels)
+        public void SetupColors(Color[] colors)
         {
-            Labels = labels;
+            Dictionary<int, string> classes = JsonConvert.DeserializeObject<Dictionary<int, string>>(InferenceSession.ModelMetadata.CustomMetadataMap["names"])!;
+            for (int i = 0; i < colors.Length; i++)
+            {
+                Labels.Add(classes.ElementAt(i).Value, colors[i]);
+            }
         }
 
         public List<YoloPrediction> Predict(Bitmap image, float conf, float iou_conf)
@@ -73,7 +85,7 @@ namespace YOLO
             {
                 float max_score = .0f;
                 int max_score_idx = 0;
-                int row_cache = j * col_len;
+                int row_cache = col_len_caches[j];
                 for (int i = 0; i < N_CLASS; i++)
                 {
                     float value = input.ElementAt(row_cache + i + 4);

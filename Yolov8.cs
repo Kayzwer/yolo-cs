@@ -1,5 +1,6 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using Newtonsoft.Json;
 using System.Collections.Concurrent;
 using System.Drawing;
 using YOLO.Extentions;
@@ -12,7 +13,6 @@ namespace YOLO
     {
         private readonly InferenceSession _inferenceSession;
         private readonly YoloModel _model = new();
-        int N_Class { get; set; }
         int Imgsz { get; set; }
 
         public Yolov8(string modelPath, bool useCuda = false)
@@ -45,13 +45,12 @@ namespace YOLO
             _inferenceSession.Run(inputs, _model.Outputs);
         }
 
-        public void SetupLabels(Dictionary<string, Color> color_mapper)
+        public void SetupColors(Color[] colors)
         {
-            int i = 0;
-            foreach (KeyValuePair<string, Color> keyValuePair in color_mapper)
+            Dictionary<int, string> classes = JsonConvert.DeserializeObject<Dictionary<int, string>>(_inferenceSession.ModelMetadata.CustomMetadataMap["names"])!;
+            for (int i = 0; i < colors.Length; i++)
             {
-                _model.Labels.Add(new(i, keyValuePair.Key, keyValuePair.Value));
-                ++i;
+                _model.Labels.Add(new(i, classes.ElementAt(i).Value, colors[i]));
             }
         }
 
@@ -146,8 +145,7 @@ namespace YOLO
 
         private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image, float conf)
         {
-            ConcurrentBag<YoloPrediction> result = new();
-
+            ConcurrentBag<YoloPrediction> result = [];
             var (w, h) = ((float)image.Width, (float)image.Height);
             var (xGain, yGain) = (Imgsz / w, Imgsz / h);
             float gain = Math.Min(xGain, yGain);
@@ -193,7 +191,6 @@ namespace YOLO
         {
             _model.Outputs = _inferenceSession.OutputMetadata.Keys.ToArray();
             _model.Dimensions = _inferenceSession.OutputMetadata[_model.Outputs[0]].Dimensions[1];
-            N_Class = _inferenceSession.OutputMetadata.ToArray()[0].Value.Dimensions[1] - 4;
         }
 
         public void Dispose()
