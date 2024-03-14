@@ -3,8 +3,8 @@
 
 ```
 Yolov8 yolov8 = new("path/to/.onnx", false);
-Dictionary<string, Color> color_mapper = []; // fill in the classes and colors.
-yolov8.SetupLabels(color_mapper);
+Color[] colors = []; // fill in the colors for classes.
+yolov8.SetupColors(colors);
 Image image = Image.FromFile("path/to/img");
 List<YoloPrediction> predictions = yolov8.Preidct((Bitmap)image, .5f, .5f);
 Utils.DrawBoundingBox(image, predictions, 2, 16); // this return a image with bouding boxes drawn.
@@ -13,10 +13,20 @@ Utils.DrawBoundingBox(image, predictions, 2, 16); // this return a image with bo
 ## YOLOv8 oriented bounding box
 ```
 OBB obb = new("path/to/.onnx", false);
-Dictionary<string, Color> color_mapper = [];
-obb.SetupLabels(color_mapper);
+Color[] colors = [];
+obb.SetupColors(colors);
 Image image = Image.FromFile("path/to/img");
 List<OBBPrediction> predictions = obb.Predict((Bitmap)image, .5f, .5f);
+Utils.DrawRotatedBoundingBox(image, predictions, 2, 16);
+```
+
+## RT-DETR object detection
+```
+RTDETR rtdetr = new("path/to/.onnx", false);
+Color[] colors = [];
+rtdetr.SetupColors(colors);
+Image image = Image.FromFile("path/to/img");
+List<OBBPrediction> predictions = rtdetr.Predict((Bitmap)image, .5f, .5f);
 Utils.DrawRotatedBoundingBox(image, predictions, 2, 16);
 ```
 
