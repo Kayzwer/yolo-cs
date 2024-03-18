@@ -27,7 +27,7 @@ Color[] colors = [];
 rtdetr.SetupColors(colors);
 Image image = Image.FromFile("path/to/img");
 List<OBBPrediction> predictions = rtdetr.Predict((Bitmap)image, .5f, .5f);
-Utils.DrawRotatedBoundingBox(image, predictions, 2, 16);
+Utils.DrawBoundingBox(image, predictions, 2, 16);
 ```
 
 ## YOLOv9 object detection (https://github.com/WongKinYiu/yolov9)
