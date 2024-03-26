@@ -33,8 +33,8 @@ Utils.DrawBoundingBox(image, predictions, 2, 16);
 ## YOLOv9 object detection (https://github.com/WongKinYiu/yolov9)
 ```
 Yolov9 yolov9 = new("path/to/.onnx", false);
-Dictionary<string, Color> color_mapper = [];
-yolov9.SetupLabels(color_mapper);
+Color[] colors = [];
+yolov9.SetupColors(colors);
 Image image = Image.FromFile("path/to/img");
 List<YoloPrediction> predictions = yolov9.Preidct((Bitmap)image, .5f, .5f);
 Utils.DrawBoundingBox(image, predictions, 2, 16);
